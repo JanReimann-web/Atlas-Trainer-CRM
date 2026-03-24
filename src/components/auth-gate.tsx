@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useAuth, useLocaleContext } from "@/components/app-providers";
-import { ALLOWED_EMAILS, isAllowedEmail, normalizeEmail } from "@/lib/auth/allowed-emails";
+import { isAllowedEmail, normalizeEmail } from "@/lib/auth/allowed-emails";
 
 type AuthMode = "signin" | "signup";
 
@@ -83,13 +83,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           <h1 className="mt-4 font-display text-5xl leading-none text-[color:var(--ink)]">
             {t("auth.title")}
           </h1>
-          <p className="mt-4 max-w-lg text-sm leading-7 text-[color:var(--muted-ink)]">
-            {t("auth.subtitle")}
-          </p>
-          <div className="mt-6 rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4 text-sm leading-7 text-[color:var(--muted-ink)]">
-            <p className="font-semibold text-[color:var(--ink)]">{t("auth.allowedOnly")}</p>
-            <p className="mt-2">{ALLOWED_EMAILS.join(" · ")}</p>
-          </div>
         </section>
 
         <section className="rounded-[32px] border border-[color:var(--line-soft)] bg-white/70 p-8">
