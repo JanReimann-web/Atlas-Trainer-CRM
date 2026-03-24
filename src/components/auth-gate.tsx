@@ -75,74 +75,76 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[color:var(--background)] px-4 py-8">
-      <div className="panel-surface grid w-full max-w-5xl gap-6 rounded-[40px] p-6 lg:grid-cols-[1.05fr_0.95fr] lg:p-8">
-        <section className="rounded-[32px] bg-[color:var(--sand-2)] p-8">
-          <p className="text-xs uppercase tracking-[0.3em] text-[color:var(--muted-ink)]">
-            Atlas Trainer CRM
-          </p>
-          <h1 className="mt-4 font-display text-5xl leading-none text-[color:var(--ink)]">
-            {t("auth.title")}
-          </h1>
-        </section>
+      <div className="panel-surface w-full max-w-md overflow-hidden rounded-[32px] p-3 sm:max-w-xl sm:p-4 lg:max-w-5xl lg:p-8">
+        <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr] lg:gap-6">
+          <section className="rounded-[28px] bg-[color:var(--sand-2)] p-6 text-center sm:p-8 lg:rounded-[32px] lg:text-left">
+            <p className="text-xs uppercase tracking-[0.3em] text-[color:var(--muted-ink)]">
+              Atlas Trainer CRM
+            </p>
+            <h1 className="mt-4 font-display text-4xl leading-[0.92] text-[color:var(--ink)] sm:text-5xl lg:text-6xl">
+              {t("auth.title")}
+            </h1>
+          </section>
 
-        <section className="rounded-[32px] border border-[color:var(--line-soft)] bg-white/70 p-8">
-          <div className="flex items-center gap-2 rounded-full bg-[color:var(--sand-2)] p-1">
-            {(["signin", "signup"] as const).map((item) => (
+          <section className="rounded-[28px] border border-[color:var(--line-soft)] bg-white/70 p-5 sm:p-8 lg:rounded-[32px]">
+            <div className="grid grid-cols-2 gap-2 rounded-full bg-[color:var(--sand-2)] p-1">
+              {(["signin", "signup"] as const).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => {
+                    setMode(item);
+                    setLocalError(null);
+                  }}
+                  className={`rounded-full px-3 py-3 text-sm font-semibold whitespace-nowrap transition sm:px-4 ${
+                    mode === item
+                      ? "bg-[color:var(--ink)] text-white"
+                      : "text-[color:var(--ink)]"
+                  }`}
+                >
+                  {item === "signin" ? t("auth.signIn") : t("auth.createAccount")}
+                </button>
+              ))}
+            </div>
+
+            <form className="mt-6 space-y-4" onSubmit={(event) => void handleSubmit(event)}>
+              <label className="block space-y-2 text-sm">
+                <span className="font-medium text-[color:var(--ink)]">{t("auth.email")}</span>
+                <input
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 outline-none"
+                />
+              </label>
+
+              <label className="block space-y-2 text-sm">
+                <span className="font-medium text-[color:var(--ink)]">{t("auth.password")}</span>
+                <input
+                  type="password"
+                  autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 outline-none"
+                />
+              </label>
+
+              {(localError || error) ? (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                  {localError || error}
+                </div>
+              ) : null}
+
               <button
-                key={item}
-                type="button"
-                onClick={() => {
-                  setMode(item);
-                  setLocalError(null);
-                }}
-                className={`flex-1 rounded-full px-4 py-2 text-sm font-semibold transition ${
-                  mode === item
-                    ? "bg-[color:var(--ink)] text-white"
-                    : "text-[color:var(--ink)]"
-                }`}
+                type="submit"
+                className="w-full rounded-2xl bg-[color:var(--ink)] px-4 py-3 text-sm font-semibold text-white sm:py-4"
               >
-                {item === "signin" ? t("auth.signIn") : t("auth.createAccount")}
+                {submitLabel}
               </button>
-            ))}
-          </div>
-
-          <form className="mt-6 space-y-4" onSubmit={(event) => void handleSubmit(event)}>
-            <label className="block space-y-2 text-sm">
-              <span className="font-medium text-[color:var(--ink)]">{t("auth.email")}</span>
-              <input
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 outline-none"
-              />
-            </label>
-
-            <label className="block space-y-2 text-sm">
-              <span className="font-medium text-[color:var(--ink)]">{t("auth.password")}</span>
-              <input
-                type="password"
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 outline-none"
-              />
-            </label>
-
-            {(localError || error) ? (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-                {localError || error}
-              </div>
-            ) : null}
-
-            <button
-              type="submit"
-              className="w-full rounded-2xl bg-[color:var(--ink)] px-4 py-3 text-sm font-semibold text-white"
-            >
-              {submitLabel}
-            </button>
-          </form>
-        </section>
+            </form>
+          </section>
+        </div>
       </div>
     </div>
   );
