@@ -16,6 +16,7 @@ import {
   signOut,
   User as FirebaseAuthUser,
 } from "firebase/auth";
+import { isAllowedEmail, normalizeEmail } from "@/lib/auth/allowed-emails";
 import { getFirebaseServices, isFirebaseConfigured } from "@/lib/firebase/client";
 import { saveCRMState, subscribeToCRMState } from "@/lib/firebase/crm-store";
 import { initialCRMState } from "@/lib/mock-data";
@@ -228,6 +229,17 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       }
 
       unsubscribeAuth = onAuthStateChanged(services.auth, (nextUser) => {
+        if (nextUser && !isAllowedEmail(nextUser.email)) {
+          setAuthError(translate(locale, "auth.restrictedAccess"));
+          setAuthUser(null);
+          setState(cloneInitialState());
+          setCrmError(null);
+          setCrmLoading(false);
+          setAuthLoading(false);
+          void signOut(services.auth).catch(() => undefined);
+          return;
+        }
+
         setAuthUser(nextUser);
         setAuthLoading(false);
         setAuthError(null);
@@ -262,7 +274,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       unsubscribeAuth?.();
       unsubscribeState?.();
     };
-  }, [firebaseConfigured]);
+  }, [firebaseConfigured, locale]);
 
   function applyCRMUpdate(updater: (previous: CRMState) => CRMState) {
     setState((previous) => {
@@ -311,63 +323,74 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     [locale],
   );
 
-  const authValue = useMemo<AuthContextValue>(
-    () => ({
-      user: authUser,
-      loading: authLoading || crmLoading,
-      error: authError,
-      firebaseConfigured,
-      liveData: firebaseConfigured && Boolean(authUser),
-      signIn: async (email, password) => {
-        const services = getFirebaseServices();
-        if (!services) {
-          return;
-        }
+  const authValue: AuthContextValue = {
+    user: authUser,
+    loading: authLoading || crmLoading,
+    error: authError,
+    firebaseConfigured,
+    liveData: firebaseConfigured && Boolean(authUser),
+    signIn: async (email, password) => {
+      const services = getFirebaseServices();
+      if (!services) {
+        return;
+      }
+      const normalizedEmail = normalizeEmail(email);
 
-        setAuthError(null);
-        setAuthLoading(true);
+      setAuthError(null);
+      setAuthLoading(true);
 
-        try {
-          await signInWithEmailAndPassword(services.auth, email, password);
-        } catch (error) {
-          setAuthLoading(false);
-          setAuthError(formatAuthError(error));
-        }
-      },
-      signUp: async (email, password) => {
-        const services = getFirebaseServices();
-        if (!services) {
-          return;
-        }
+      if (!isAllowedEmail(normalizedEmail)) {
+        setAuthLoading(false);
+        setAuthError(translate(locale, "auth.restrictedAccess"));
+        return;
+      }
 
-        setAuthError(null);
-        setAuthLoading(true);
+      try {
+        await signInWithEmailAndPassword(services.auth, normalizedEmail, password);
+      } catch (error) {
+        setAuthLoading(false);
+        setAuthError(formatAuthError(error));
+      }
+    },
+    signUp: async (email, password) => {
+      const services = getFirebaseServices();
+      if (!services) {
+        return;
+      }
+      const normalizedEmail = normalizeEmail(email);
 
-        try {
-          await createUserWithEmailAndPassword(services.auth, email, password);
-        } catch (error) {
-          setAuthLoading(false);
-          setAuthError(formatAuthError(error));
-        }
-      },
-      signOutUser: async () => {
-        const services = getFirebaseServices();
-        if (!services) {
-          return;
-        }
+      setAuthError(null);
+      setAuthLoading(true);
 
-        setAuthLoading(true);
+      if (!isAllowedEmail(normalizedEmail)) {
+        setAuthLoading(false);
+        setAuthError(translate(locale, "auth.restrictedAccess"));
+        return;
+      }
 
-        try {
-          await signOut(services.auth);
-        } catch (error) {
-          setAuthLoading(false);
-          setAuthError(formatAuthError(error));
-        }
-      },
-    }),
-    [authError, authLoading, authUser, crmLoading, firebaseConfigured],
-  );
+      try {
+        await createUserWithEmailAndPassword(services.auth, normalizedEmail, password);
+      } catch (error) {
+        setAuthLoading(false);
+        setAuthError(formatAuthError(error));
+      }
+    },
+    signOutUser: async () => {
+      const services = getFirebaseServices();
+      if (!services) {
+        return;
+      }
+
+      setAuthLoading(true);
+
+      try {
+        await signOut(services.auth);
+      } catch (error) {
+        setAuthLoading(false);
+        setAuthError(formatAuthError(error));
+      }
+    },
+  };
 
   const crmValue: CRMContextValue = {
     state,

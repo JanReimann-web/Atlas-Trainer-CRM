@@ -68,8 +68,11 @@ const messages: Record<Locale, DictionaryTree> = {
       featureOne: "Shared CRM state now persists in Firestore instead of browser-only demo storage.",
       featureTwo: "All AI draft routes stay server-side and can use your configured OpenAI model.",
       featureThree: "Microsoft Graph can still be added later without changing the rest of the workflow.",
+      allowedOnly: "Allowed accounts",
       fillAllFields: "Fill in both email and password.",
       passwordHint: "Password must be at least 6 characters.",
+      restrictedAccess:
+        "This CRM is restricted to approved accounts only. Use one of the allowed coach email addresses.",
     },
     help: {
       leadStatus:
@@ -298,8 +301,11 @@ const messages: Record<Locale, DictionaryTree> = {
       featureOne: "Jagatud CRM seis salvestub nüüd Firestore'i, mitte ainult brauseri demoandmetesse.",
       featureTwo: "Kõik AI mustandi route'id jäävad serverisse ja saavad kasutada sinu OpenAI mudelit.",
       featureThree: "Microsoft Graphi saab lisada hiljem ilma ülejäänud töövoogu ümber tegemata.",
+      allowedOnly: "Lubatud kontod",
       fillAllFields: "Täida nii e-post kui parool.",
       passwordHint: "Parool peab olema vähemalt 6 tähemärki pikk.",
+      restrictedAccess:
+        "See CRM on piiratud ainult kinnitatud kasutajatele. Kasuta ühte lubatud treeneri e-posti aadressidest.",
     },
     help: {
       leadStatus:

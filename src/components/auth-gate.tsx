@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useAuth, useLocaleContext } from "@/components/app-providers";
+import { ALLOWED_EMAILS, isAllowedEmail, normalizeEmail } from "@/lib/auth/allowed-emails";
 
 type AuthMode = "signin" | "signup";
 
@@ -21,8 +22,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLocalError(null);
+    const normalizedEmail = normalizeEmail(email);
 
-    if (!email.trim() || !password.trim()) {
+    if (!normalizedEmail || !password.trim()) {
       setLocalError(t("auth.fillAllFields"));
       return;
     }
@@ -32,12 +34,17 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (mode === "signin") {
-      await signIn(email.trim(), password);
+    if (!isAllowedEmail(normalizedEmail)) {
+      setLocalError(t("auth.restrictedAccess"));
       return;
     }
 
-    await signUp(email.trim(), password);
+    if (mode === "signin") {
+      await signIn(normalizedEmail, password);
+      return;
+    }
+
+    await signUp(normalizedEmail, password);
   }
 
   if (!firebaseConfigured) {
@@ -79,6 +86,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           <p className="mt-4 max-w-lg text-sm leading-7 text-[color:var(--muted-ink)]">
             {t("auth.subtitle")}
           </p>
+          <div className="mt-6 rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4 text-sm leading-7 text-[color:var(--muted-ink)]">
+            <p className="font-semibold text-[color:var(--ink)]">{t("auth.allowedOnly")}</p>
+            <p className="mt-2">{ALLOWED_EMAILS.join(" · ")}</p>
+          </div>
           <div className="mt-8 space-y-3 text-sm text-[color:var(--muted-ink)]">
             <p>{t("auth.featureOne")}</p>
             <p>{t("auth.featureTwo")}</p>
