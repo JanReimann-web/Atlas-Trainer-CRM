@@ -88,20 +88,20 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
           <section className="rounded-[28px] border border-[color:var(--line-soft)] bg-white/70 p-5 sm:p-8 lg:rounded-[32px]">
             <div className="grid grid-cols-2 gap-2 rounded-full bg-[color:var(--sand-2)] p-1">
-              {(["signin", "signup"] as const).map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => {
-                    setMode(item);
-                    setLocalError(null);
-                  }}
-                  className={`rounded-full px-3 py-3 text-sm font-semibold whitespace-nowrap transition sm:px-4 ${
-                    mode === item
-                      ? "bg-[color:var(--ink)] text-white"
-                      : "text-[color:var(--ink)]"
-                  }`}
-                >
+            {(["signin", "signup"] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => {
+                  setMode(item);
+                  setLocalError(null);
+                }}
+                className={`flex min-h-[52px] items-center justify-center rounded-full px-2 py-3 text-[13px] font-semibold whitespace-nowrap tracking-tight transition sm:px-4 sm:text-sm ${
+                  mode === item
+                    ? "bg-[color:var(--ink)] text-white"
+                    : "text-[color:var(--ink)]"
+                }`}
+              >
                   {item === "signin" ? t("auth.signIn") : t("auth.createAccount")}
                 </button>
               ))}
