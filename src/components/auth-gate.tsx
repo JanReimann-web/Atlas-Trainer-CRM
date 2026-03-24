@@ -90,11 +90,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             <p className="font-semibold text-[color:var(--ink)]">{t("auth.allowedOnly")}</p>
             <p className="mt-2">{ALLOWED_EMAILS.join(" · ")}</p>
           </div>
-          <div className="mt-8 space-y-3 text-sm text-[color:var(--muted-ink)]">
-            <p>{t("auth.featureOne")}</p>
-            <p>{t("auth.featureTwo")}</p>
-            <p>{t("auth.featureThree")}</p>
-          </div>
         </section>
 
         <section className="rounded-[32px] border border-[color:var(--line-soft)] bg-white/70 p-8">
