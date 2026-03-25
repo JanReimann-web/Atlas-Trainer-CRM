@@ -15,6 +15,29 @@ export function getLeadCounts(state: CRMState) {
   }, {});
 }
 
+export function getConvertedClientsWithFirstSessionBookedCount(state: CRMState) {
+  return state.clients.filter((client) => {
+    const hasConvertedLeadOrigin = Boolean(
+      client.originLeadId ||
+        state.leads.some(
+          (lead) =>
+            lead.status === "converted" &&
+            lead.email.toLowerCase() === client.email.toLowerCase(),
+        ),
+    );
+
+    if (!hasConvertedLeadOrigin) {
+      return false;
+    }
+
+    const firstSession = getClientSessions(state, client.id)[0];
+    return Boolean(
+      firstSession &&
+        (firstSession.status === "planned" || firstSession.status === "in-progress"),
+    );
+  }).length;
+}
+
 export function getClientSessions(state: CRMState, clientId: string) {
   return state.sessions
     .filter((session) => session.clientIds.includes(clientId))

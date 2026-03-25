@@ -63,7 +63,7 @@ export function StatCard({
 }: {
   label: string;
   value: string;
-  detail: string;
+  detail?: string;
 }) {
   return (
     <div className="panel-surface rounded-[28px] p-5">
@@ -71,7 +71,9 @@ export function StatCard({
         {label}
       </p>
       <p className="mt-3 font-display text-4xl text-[color:var(--ink)]">{value}</p>
-      <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">{detail}</p>
+      {detail ? (
+        <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">{detail}</p>
+      ) : null}
     </div>
   );
 }

@@ -179,6 +179,7 @@ const messages: Record<Locale, DictionaryTree> = {
     leads: {
       title: "Lead pipeline",
       subtitle: "Track first contacts, trial sessions, and conversion into long-term clients.",
+      firstSessionBooked: "First session booked",
       convert: "Convert to client",
       converted: "Converted",
       nextStep: "Next step",
@@ -537,6 +538,7 @@ const messages: Record<Locale, DictionaryTree> = {
     leads: {
       title: "Leadi toru",
       subtitle: "Halda esmakontakte, proovitreeninguid ja konverteerimist pikaajaliseks kliendiks.",
+      firstSessionBooked: "Esimene treening broneeritud",
       convert: "Muuda kliendiks",
       converted: "Kliendiks muudetud",
       nextStep: "Järgmine samm",

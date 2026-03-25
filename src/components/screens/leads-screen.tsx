@@ -4,7 +4,10 @@ import { FormEvent, useDeferredValue, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCRM, useLocaleContext } from "@/components/app-providers";
 import { DataLabel, EmptyState, SectionCard, StatCard, StatusBadge } from "@/components/crm-ui";
-import { getLeadCounts } from "@/lib/selectors";
+import {
+  getConvertedClientsWithFirstSessionBookedCount,
+  getLeadCounts,
+} from "@/lib/selectors";
 import { CreateLeadInput } from "@/lib/types";
 import { PageLead } from "@/components/screens/shared";
 
@@ -35,6 +38,10 @@ export function LeadsScreen() {
     [state.leads],
   );
   const counts = getLeadCounts(state);
+  const firstSessionBookedCount = useMemo(
+    () => getConvertedClientsWithFirstSessionBookedCount(state),
+    [state],
+  );
 
   const filtered = useMemo(
     () =>
@@ -84,21 +91,15 @@ export function LeadsScreen() {
 
   return (
     <div className="space-y-6">
-      <PageLead eyebrow={t("nav.leads")} title={t("leads.title")} subtitle={t("leads.subtitle")} />
+      <PageLead eyebrow={t("nav.leads")} title={t("leads.title")} />
 
       <div className="grid gap-4 md:grid-cols-3">
-        {visibleLeadStatuses.map((status) => (
-          <StatCard
-            key={status}
-            label={t(`status.${status}`)}
-            value={String(counts[status] ?? 0)}
-            detail={
-              status === "trial-booked"
-                ? t("leads.trialReadyDetail")
-                : t("leads.pipelineVisibleDetail")
-            }
-          />
-        ))}
+        <StatCard label={t("status.new")} value={String(counts.new ?? 0)} />
+        <StatCard label={t("status.contacted")} value={String(counts.contacted ?? 0)} />
+        <StatCard
+          label={t("leads.firstSessionBooked")}
+          value={String(firstSessionBookedCount)}
+        />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
