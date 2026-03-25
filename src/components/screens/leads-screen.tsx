@@ -225,14 +225,16 @@ export function LeadsScreen() {
                   key={lead.id}
                   className="rounded-[26px] border border-[color:var(--line-soft)] bg-white/70 p-5"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
                       <p className="text-lg font-semibold text-[color:var(--ink)]">{lead.fullName}</p>
-                      <p className="text-sm leading-6 text-[color:var(--muted-ink)]">
+                      <p className="break-words text-sm leading-6 text-[color:var(--muted-ink)]">
                         {lead.email} / {lead.phone}
                       </p>
                     </div>
-                    <StatusBadge status={lead.status} />
+                    <div className="shrink-0">
+                      <StatusBadge status={lead.status} />
+                    </div>
                   </div>
                   <div className="mt-4 grid gap-2 text-sm leading-6 text-[color:var(--muted-ink)]">
                     <p>

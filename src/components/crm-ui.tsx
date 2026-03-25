@@ -261,9 +261,19 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {nextSession ? (
                     <Link
                       href={`/clients/${nextSession.primaryClientId}/sessions/${nextSession.id}`}
-                      className="rounded-full bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-white"
+                      className="inline-flex max-w-full items-center gap-3 rounded-full bg-[color:var(--ink)] px-3 py-2 text-[color:var(--paper)] shadow-[0_14px_32px_rgba(27,39,33,0.18)] transition hover:translate-y-[-1px] hover:bg-[#24342c]"
                     >
-                      {t("app.upcomingSession")} / {formatDate(nextSession.startAt)}
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/12 text-lg leading-none text-white">
+                        &gt;
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-[10px] font-semibold uppercase tracking-[0.24em] text-white/72">
+                          {t("app.upcomingSession")}
+                        </span>
+                        <span className="block truncate text-sm font-semibold text-white">
+                          {formatDate(nextSession.startAt)}
+                        </span>
+                      </span>
                     </Link>
                   ) : null}
                 </div>
