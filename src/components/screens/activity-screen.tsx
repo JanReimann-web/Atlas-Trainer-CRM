@@ -17,7 +17,7 @@ export function ActivityScreen() {
           {state.activityEvents.map((event) => (
             <TimelineItem
               key={event.id}
-              title={`${event.actor} · ${event.type}`}
+              title={`${event.actor} / ${event.type}`}
               detail={event.detail}
               meta={formatDate(event.createdAt)}
             />

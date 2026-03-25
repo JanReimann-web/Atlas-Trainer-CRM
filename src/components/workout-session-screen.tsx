@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useState, useTransition } from "react";
 import { useCRM, useLocaleContext } from "@/components/app-providers";
 import {
   DataLabel,
@@ -39,17 +39,19 @@ function DraftEditor({
   onSend: (draftId: string) => void;
   sendLabel: string;
 }) {
+  const { t } = useLocaleContext();
+
   return (
     <div className="space-y-4 rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
       <p className="font-semibold text-[color:var(--ink)]">{title}</p>
-      <DataLabel label="Subject">
+      <DataLabel label={t("workout.draftSubject")}>
         <input
           value={subject}
           onChange={(event) => onChange(draftId, { subject: event.target.value })}
           className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/90 px-4 py-3 text-sm outline-none"
         />
       </DataLabel>
-      <DataLabel label="Draft body">
+      <DataLabel label={t("workout.draftBody")}>
         <textarea
           value={body}
           onChange={(event) => onChange(draftId, { body: event.target.value })}
@@ -57,7 +59,7 @@ function DraftEditor({
           className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/90 px-4 py-3 text-sm leading-6 outline-none"
         />
       </DataLabel>
-      <DataLabel label="Internal note">
+      <DataLabel label={t("workout.internalNote")}>
         <textarea
           value={internalNote ?? ""}
           onChange={(event) => onChange(draftId, { internalNote: event.target.value })}
@@ -103,8 +105,8 @@ export function WorkoutSessionScreen({
   if (!bundle || !bundle.client || bundle.client.id !== clientId) {
     return (
       <EmptyState
-        title="Session not found"
-        body="The requested session is missing from the current CRM state."
+        title={t("workout.missingSessionTitle")}
+        body={t("workout.missingSessionBody")}
       />
     );
   }
@@ -113,8 +115,8 @@ export function WorkoutSessionScreen({
   if (!sessionWorkout) {
     return (
       <EmptyState
-        title="Workout log missing"
-        body="This session does not yet have a live workout log attached."
+        title={t("workout.missingWorkoutTitle")}
+        body={t("workout.missingWorkoutBody")}
       />
     );
   }
@@ -130,7 +132,8 @@ export function WorkoutSessionScreen({
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
 
   async function generateDraft(kind: DraftKind) {
-    const endpoint = kind === "workout-summary" ? "/api/ai/workout-summary" : "/api/ai/next-session";
+    const endpoint =
+      kind === "workout-summary" ? "/api/ai/workout-summary" : "/api/ai/next-session";
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -153,29 +156,29 @@ export function WorkoutSessionScreen({
       <PageLead
         eyebrow={t("workout.title")}
         title={session.title}
-        subtitle={`${client.fullName} · ${formatDate(session.startAt)} · ${session.location}`}
+        subtitle={`${client.fullName} / ${formatDate(session.startAt)} / ${session.location}`}
       />
 
       <div className="grid gap-4 md:grid-cols-4">
         <StatCard
           label={t("workout.live")}
           value={`${completion.completedSets}/${completion.totalSets}`}
-          detail="Completed sets"
+          detail={t("workout.completedSetsDetail")}
         />
         <StatCard
           label={t("workout.modified")}
           value={String(adjustments.modified)}
-          detail="Exercises changed on the floor"
+          detail={t("workout.modifiedExercisesDetail")}
         />
         <StatCard
           label={t("workout.added")}
           value={String(adjustments.added)}
-          detail="Extra exercises added live"
+          detail={t("workout.addedExercisesDetail")}
         />
         <StatCard
           label={t("workout.skipped")}
           value={String(adjustments.skipped)}
-          detail="Planned items skipped"
+          detail={t("workout.skippedExercisesDetail")}
         />
       </div>
 
@@ -217,7 +220,7 @@ export function WorkoutSessionScreen({
                       </div>
                       <p className="mt-1 text-sm text-[color:var(--muted-ink)]">
                         {plannedWorkout?.exercises.find((planned) => planned.id === exercise.plannedExerciseId)?.note ??
-                          "Live adjustments allowed"}
+                          t("workout.liveAdjustmentsAllowed")}
                       </p>
                     </div>
                     <button
@@ -231,7 +234,7 @@ export function WorkoutSessionScreen({
                       }
                       className="rounded-full bg-[color:var(--sand-2)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
                     >
-                      {exercise.status === "skipped" ? "Restore" : "Skip"}
+                      {exercise.status === "skipped" ? t("workout.restore") : t("workout.skip")}
                     </button>
                   </div>
 
@@ -239,11 +242,11 @@ export function WorkoutSessionScreen({
                     <table className="min-w-full text-sm">
                       <thead>
                         <tr className="text-left text-[color:var(--muted-ink)]">
-                          <th className="pb-3 pr-3">Set</th>
+                          <th className="pb-3 pr-3">{t("workout.setColumn")}</th>
                           <th className="pb-3 pr-3">{t("workout.planned")}</th>
-                          <th className="pb-3 pr-3">{t("workout.actual")} reps</th>
-                          <th className="pb-3 pr-3">{t("workout.actual")} kg</th>
-                          <th className="pb-3 pr-3">RPE</th>
+                          <th className="pb-3 pr-3">{t("workout.actualReps")}</th>
+                          <th className="pb-3 pr-3">{t("workout.actualWeight")}</th>
+                          <th className="pb-3 pr-3">{t("workout.rpe")}</th>
                           <th className="pb-3">{t("workout.setDone")}</th>
                         </tr>
                       </thead>
@@ -313,7 +316,7 @@ export function WorkoutSessionScreen({
                   </div>
 
                   <div className="mt-4">
-                    <DataLabel label="Exercise note">
+                    <DataLabel label={t("workout.exerciseNote")}>
                       <textarea
                         value={exercise.note ?? ""}
                         onChange={(event) =>
@@ -332,7 +335,7 @@ export function WorkoutSessionScreen({
               <input
                 value={newExerciseName}
                 onChange={(event) => setNewExerciseName(event.target.value)}
-                placeholder="Add a new live exercise"
+                placeholder={t("workout.addLiveExercisePlaceholder")}
                 className="rounded-2xl border border-[color:var(--line-soft)] bg-white/90 px-4 py-3 text-sm outline-none"
               />
               <button
@@ -376,7 +379,7 @@ export function WorkoutSessionScreen({
         </div>
 
         <div className="space-y-6">
-          <SectionCard title="AI tools" help={t("help.aiDrafts")}>
+          <SectionCard title={t("workout.aiTools")} help={t("help.aiDrafts")}>
             <div className="grid gap-3">
               <button
                 type="button"

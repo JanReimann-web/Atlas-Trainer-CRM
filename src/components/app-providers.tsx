@@ -160,20 +160,19 @@ function updateWorkout(
   };
 }
 
-function formatAuthError(error: unknown) {
-  const message =
-    error instanceof Error ? error.message : "Firebase authentication request failed.";
+function formatAuthError(locale: Locale, error: unknown) {
+  const message = error instanceof Error ? error.message : translate(locale, "auth.requestFailed");
 
   if (message.includes("auth/invalid-credential")) {
-    return "Email or password is incorrect.";
+    return translate(locale, "auth.invalidCredentials");
   }
 
   if (message.includes("auth/email-already-in-use")) {
-    return "This email already has an account.";
+    return translate(locale, "auth.emailInUse");
   }
 
   if (message.includes("auth/weak-password")) {
-    return "Password must be at least 6 characters.";
+    return translate(locale, "auth.passwordHint");
   }
 
   return message;
@@ -199,6 +198,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+    document.documentElement.lang = locale;
   }, [locale]);
 
   useEffect(() => {
@@ -290,7 +290,9 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
             .then(() => saveCRMState(services.db, next, previous))
             .catch((error) => {
               setCrmError(
-                error instanceof Error ? error.message : "Could not sync CRM state to Firebase.",
+                error instanceof Error
+                  ? error.message
+                  : "Could not sync CRM state to Firebase.",
               );
             });
         }
@@ -349,7 +351,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         await signInWithEmailAndPassword(services.auth, normalizedEmail, password);
       } catch (error) {
         setAuthLoading(false);
-        setAuthError(formatAuthError(error));
+        setAuthError(formatAuthError(locale, error));
       }
     },
     signUp: async (email, password) => {
@@ -372,7 +374,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         await createUserWithEmailAndPassword(services.auth, normalizedEmail, password);
       } catch (error) {
         setAuthLoading(false);
-        setAuthError(formatAuthError(error));
+        setAuthError(formatAuthError(locale, error));
       }
     },
     signOutUser: async () => {
@@ -387,7 +389,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         await signOut(services.auth);
       } catch (error) {
         setAuthLoading(false);
-        setAuthError(formatAuthError(error));
+        setAuthError(formatAuthError(locale, error));
       }
     },
   };

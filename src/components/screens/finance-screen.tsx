@@ -21,9 +21,21 @@ export function FinanceScreen() {
       <PageLead eyebrow={t("nav.finance")} title={t("finance.title")} subtitle={t("finance.subtitle")} />
 
       <div className="grid gap-4 md:grid-cols-3">
-        <StatCard label={t("dashboard.receivedThisMonth")} value={formatCurrency(getMonthlyRevenue(state))} detail="Payments received in March" />
-        <StatCard label={t("dashboard.outstanding")} value={formatCurrency(getOutstandingRevenue(state))} detail="Still needs collection" />
-        <StatCard label={t("dashboard.packageLiability")} value={formatCurrency(getPackageLiability(state))} detail="Prepaid sessions not yet delivered" />
+        <StatCard
+          label={t("dashboard.receivedThisMonth")}
+          value={formatCurrency(getMonthlyRevenue(state))}
+          detail={t("finance.receivedDetail")}
+        />
+        <StatCard
+          label={t("dashboard.outstanding")}
+          value={formatCurrency(getOutstandingRevenue(state))}
+          detail={t("finance.outstandingDetail")}
+        />
+        <StatCard
+          label={t("dashboard.packageLiability")}
+          value={formatCurrency(getPackageLiability(state))}
+          detail={t("finance.liabilityDetail")}
+        />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
@@ -37,7 +49,7 @@ export function FinanceScreen() {
                     <div>
                       <p className="font-semibold text-[color:var(--ink)]">{client?.fullName}</p>
                       <p className="text-sm text-[color:var(--muted-ink)]">
-                        {invoice.id} · {formatDate(invoice.dueAt)}
+                        {invoice.id} / {formatDate(invoice.dueAt)}
                       </p>
                     </div>
                     <p className="font-semibold text-[color:var(--ink)]">{formatCurrency(invoice.amount)}</p>
@@ -57,7 +69,7 @@ export function FinanceScreen() {
                   <TimelineItem
                     key={purchase.id}
                     title={client?.fullName ?? purchase.id}
-                    detail={`${getRemainingUnits(purchase)} remaining sessions`}
+                    detail={`${getRemainingUnits(purchase)} ${t("finance.expiringRemaining")}`}
                     meta={formatDate(purchase.expiresAt)}
                   />
                 );

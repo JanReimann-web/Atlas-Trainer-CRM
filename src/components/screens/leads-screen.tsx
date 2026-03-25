@@ -35,8 +35,8 @@ export function LeadsScreen() {
             value={String(counts[status] ?? 0)}
             detail={
               status === "trial-booked"
-                ? "Ready for intake and payment prep"
-                : "Visible in the CRM pipeline"
+                ? t("leads.trialReadyDetail")
+                : t("leads.pipelineVisibleDetail")
             }
           />
         ))}
@@ -44,7 +44,7 @@ export function LeadsScreen() {
 
       <SectionCard
         title={t("leads.title")}
-        subtitle="Convert a lead once the first session or assessment is sold."
+        subtitle={t("leads.sectionSubtitle")}
         help={t("help.leadStatus")}
         aside={
           <input
@@ -65,7 +65,7 @@ export function LeadsScreen() {
                 <div>
                   <p className="text-lg font-semibold text-[color:var(--ink)]">{lead.fullName}</p>
                   <p className="text-sm leading-6 text-[color:var(--muted-ink)]">
-                    {lead.email} · {lead.phone}
+                    {lead.email} / {lead.phone}
                   </p>
                 </div>
                 <StatusBadge status={lead.status} />

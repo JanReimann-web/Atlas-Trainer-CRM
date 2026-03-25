@@ -34,7 +34,7 @@ export function ClientsScreen() {
 
       <SectionCard
         title={t("clients.title")}
-        subtitle="Each client card links into a full profile with packages, plans, assessments, and communication."
+        subtitle={t("clients.sectionSubtitle")}
         aside={
           <input
             value={query}
@@ -69,7 +69,7 @@ export function ClientsScreen() {
                     />
                     <div>
                       <p className="text-lg font-semibold text-[color:var(--ink)]">{client.fullName}</p>
-                      <p className="text-sm text-[color:var(--muted-ink)]">{client.tags.join(" · ")}</p>
+                      <p className="text-sm text-[color:var(--muted-ink)]">{client.tags.join(" / ")}</p>
                     </div>
                   </div>
                   <StatusBadge status={client.consentStatus} />
@@ -82,11 +82,11 @@ export function ClientsScreen() {
                   </p>
                   <p>
                     <span className="font-semibold text-[color:var(--ink)]">{t("clients.nextSession")}:</span>{" "}
-                    {nextSession ? formatDate(nextSession.startAt) : "No date yet"}
+                    {nextSession ? formatDate(nextSession.startAt) : t("common.noDateYet")}
                   </p>
                   <p>
                     <span className="font-semibold text-[color:var(--ink)]">{t("clients.activePlan")}:</span>{" "}
-                    {activePlan?.title ?? "No active plan"}
+                    {activePlan?.title ?? t("common.noActivePlan")}
                   </p>
                 </div>
               </Link>

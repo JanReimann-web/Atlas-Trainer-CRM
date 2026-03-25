@@ -50,7 +50,13 @@ const messages: Record<Locale, DictionaryTree> = {
       firebaseConnected: "Firebase sync",
       firebaseConnectedDetail:
         "Authentication and Firestore persistence are active. Changes save directly to the shared workspace.",
+      integrationFallbackDetail:
+        "UI and server routes are ready for Microsoft Graph credentials when you want to enable Outlook sync.",
       currency: "EUR",
+      emailChannel: "Email",
+      calendarChannel: "Calendar",
+      noDateYet: "No date yet",
+      noActivePlan: "No active plan",
     },
     auth: {
       title: "Sign in to your coaching workspace",
@@ -65,14 +71,13 @@ const messages: Record<Locale, DictionaryTree> = {
       loadingTitle: "Connecting workspace",
       loadingSubtitle: "Checking your Firebase session before loading the CRM.",
       syncingWorkspace: "Your account is ready. Syncing the latest CRM data from Firestore.",
-      featureOne: "Shared CRM state now persists in Firestore instead of browser-only demo storage.",
-      featureTwo: "All AI draft routes stay server-side and can use your configured OpenAI model.",
-      featureThree: "Microsoft Graph can still be added later without changing the rest of the workflow.",
-      allowedOnly: "Allowed accounts",
       fillAllFields: "Fill in both email and password.",
       passwordHint: "Password must be at least 6 characters.",
       restrictedAccess:
         "This CRM is restricted to approved accounts only. Use one of the allowed coach email addresses.",
+      invalidCredentials: "Email or password is incorrect.",
+      emailInUse: "This email already has an account.",
+      requestFailed: "Firebase authentication request failed.",
     },
     help: {
       leadStatus:
@@ -92,24 +97,38 @@ const messages: Record<Locale, DictionaryTree> = {
       integrations:
         "Integrations are scaffolded server-side so credentials stay off the client. Enable them later by filling the environment variables.",
       workoutPlan:
-        "An active workout plan becomes the source for the next session’s prefilled exercise list, which the coach can tick off or modify live.",
+        "An active workout plan becomes the source for the next session's prefilled exercise list, which the coach can tick off or modify live.",
       communication:
         "Outgoing drafts and historical replies are grouped into threads so the coach sees the full conversation context before sending a recap.",
     },
     dashboard: {
       title: "Coach command center",
       subtitle:
-        "Today’s schedule, package exposure, AI draft queue, and client momentum at a glance.",
+        "Today's schedule, package exposure, AI draft queue, and client momentum at a glance.",
       sessionsToday: "Sessions today",
       activeClients: "Active clients",
       openLeads: "Open leads",
       receivedThisMonth: "Received this month",
       focusBoard: "Focus board",
-      agenda: "Today’s agenda",
+      agenda: "Today's agenda",
       aiQueue: "AI review queue",
       activity: "Latest activity",
       packageLiability: "Unused package liability",
       outstanding: "Outstanding invoices",
+      activeClientsDetail: "signed consents",
+      openLeadsDetail: "with a trial already booked",
+      sessionsTodayFirst: "first session start",
+      sessionsTodayNone: "No live sessions on the board",
+      receivedThisMonthDetail: "still outstanding",
+      agendaSubtitle:
+        "Upcoming sessions connect calendar, packages, and live workout execution from a single place.",
+      focusBoardSubtitle: "Quick financial and retention exposure for the current month.",
+      outstandingDetail:
+        "Invoices with partial or missing payments remain visible until fully settled.",
+      liabilityDetail: "Represents prepaid sessions that still need to be delivered.",
+      aiQueueSubtitle: "Drafts waiting for review before they are logged or sent.",
+      aiQueueEmpty: "Generate a workout recap or plan update to fill the review queue.",
+      activitySubtitle: "Recent system and coach actions.",
     },
     leads: {
       title: "Lead pipeline",
@@ -119,6 +138,9 @@ const messages: Record<Locale, DictionaryTree> = {
       nextStep: "Next step",
       source: "Source",
       goal: "Goal",
+      sectionSubtitle: "Convert a lead once the first session or assessment is sold.",
+      trialReadyDetail: "Ready for intake and payment prep",
+      pipelineVisibleDetail: "Visible in the CRM pipeline",
     },
     clients: {
       title: "Client roster",
@@ -128,6 +150,8 @@ const messages: Record<Locale, DictionaryTree> = {
       activePlan: "Active plan",
       packageLabel: "Package balance",
       consent: "Consent",
+      sectionSubtitle:
+        "Each client card links into a full profile with packages, plans, assessments, and communication.",
     },
     clientProfile: {
       overview: "Profile overview",
@@ -140,6 +164,20 @@ const messages: Record<Locale, DictionaryTree> = {
       latestAssessment: "Latest assessment",
       openActiveSession: "Open active workout view",
       noSession: "No upcoming session scheduled yet.",
+      missingTitle: "Client not found",
+      missingBody: "The requested client profile does not exist in the current CRM state.",
+      activePackageDetail: "active",
+      noActivePackage: "No active package",
+      coachConfirmBlock: "Coach should confirm a new block",
+      noAssessment: "No body assessment has been recorded yet.",
+      nutritionCalories: "Calories",
+      nutritionProtein: "Protein",
+      nutritionCarbs: "Carbs",
+      nutritionFats: "Fats",
+      nutritionHydration: "Hydration",
+      nutritionPerDay: "kcal / day",
+      nutritionGrams: "grams",
+      nutritionLiters: "liters",
     },
     workout: {
       title: "Workout execution",
@@ -162,6 +200,27 @@ const messages: Record<Locale, DictionaryTree> = {
       live: "Live log",
       emptyDraft:
         "No draft yet. Generate a recap or next-session note after updating the session log.",
+      draftSubject: "Subject",
+      draftBody: "Draft body",
+      internalNote: "Internal note",
+      missingSessionTitle: "Session not found",
+      missingSessionBody: "The requested session is missing from the current CRM state.",
+      missingWorkoutTitle: "Workout log missing",
+      missingWorkoutBody: "This session does not yet have a live workout log attached.",
+      completedSetsDetail: "Completed sets",
+      modifiedExercisesDetail: "Exercises changed on the floor",
+      addedExercisesDetail: "Extra exercises added live",
+      skippedExercisesDetail: "Planned items skipped",
+      liveAdjustmentsAllowed: "Live adjustments allowed",
+      restore: "Restore",
+      skip: "Skip",
+      setColumn: "Set",
+      actualReps: "Actual reps",
+      actualWeight: "Actual kg",
+      rpe: "RPE",
+      exerciseNote: "Exercise note",
+      addLiveExercisePlaceholder: "Add a new live exercise",
+      aiTools: "AI tools",
     },
     calendar: {
       title: "Calendar and reminders",
@@ -177,6 +236,9 @@ const messages: Record<Locale, DictionaryTree> = {
       nutritionPlan: "Nutrition plan",
       generateWorkout: "Generate workout block draft",
       generateNutrition: "Generate nutrition draft",
+      sectionSubtitle:
+        "Choose a client, then generate either a workout block draft or a nutrition draft.",
+      clientLabel: "Client",
     },
     communications: {
       title: "Email threads and follow-ups",
@@ -193,6 +255,10 @@ const messages: Record<Locale, DictionaryTree> = {
       payments: "Payments",
       templates: "Package catalog",
       expiring: "Expiring packages",
+      receivedDetail: "Payments received this month",
+      outstandingDetail: "Still needs collection",
+      liabilityDetail: "Prepaid sessions not yet delivered",
+      expiringRemaining: "remaining sessions",
     },
     settings: {
       title: "System readiness",
@@ -203,6 +269,16 @@ const messages: Record<Locale, DictionaryTree> = {
       translation: "Translation behavior",
       translationNote:
         "English is the default locale. Estonian mirrors navigation, help text, and draft framing so the coach can switch without losing context.",
+      integrationFirebaseDetail:
+        "Firebase Auth and Firestore persistence are wired into the app. Storage is configured and ready for client files when file uploads are added.",
+      integrationOpenAIDetail:
+        "AI routes run server-side and now call the configured OpenAI model, while keeping deterministic fallbacks if the API is unavailable.",
+      integrationMicrosoftDetail:
+        "Outlook email and calendar sync are modeled in the UI and server layer. Add Microsoft app credentials to enable live Graph calls.",
+      packageSession: "sessions",
+      packagePerson: "person",
+      packagePeople: "people",
+      packageUpTo: "up to",
     },
     activity: {
       title: "Activity log",
@@ -241,14 +317,14 @@ const messages: Record<Locale, DictionaryTree> = {
   et: {
     app: {
       name: "Atlas Trainer CRM",
-      tagline: "Treeneri töölaud treeningute, kliendihalduse ja AI mustanditega ühes voos.",
+      tagline: "Treeneri töölaud treeningute, kliendihalduse ja AI-mustanditega ühes voos.",
       demoMode: "Demoandmete režiim",
-      liveMode: "Firebase live režiim",
+      liveMode: "Firebase live-režiim",
       upcomingSession: "Ava järgmine trenn",
       allUsers: "Jagatud ligipääs",
       locale: "Keel",
       localeHelp:
-        "Vaheta kogu CRM inglise ja eesti keele vahel. Sama keelt kasutavad ka abi-pop-up’id ja AI mustandi raamistik.",
+        "Vaheta kogu CRM inglise ja eesti keele vahel. Sama keelt kasutavad ka abiaknad ja AI-mustandi raamistik.",
     },
     nav: {
       dashboard: "Töölaud",
@@ -280,15 +356,21 @@ const messages: Record<Locale, DictionaryTree> = {
       remaining: "järel",
       revenue: "Tulu",
       outlookReady: "Outlooki sünk",
-      firebaseConnected: "Firebase sünk",
+      firebaseConnected: "Firebase'i sünk",
       firebaseConnectedDetail:
         "Autentimine ja Firestore'i salvestus on aktiivsed. Muudatused lähevad otse jagatud tööruumi.",
+      integrationFallbackDetail:
+        "UI ja serveripoolsed route'id on valmis Microsoft Graphi võtmete lisamiseks, kui soovid Outlooki sünkrooni sisse lülitada.",
       currency: "EUR",
+      emailChannel: "E-post",
+      calendarChannel: "Kalender",
+      noDateYet: "Kuupäev puudub",
+      noActivePlan: "Aktiivne kava puudub",
     },
     auth: {
       title: "Logi treeneri tööruumi sisse",
       subtitle:
-        "Firebase autentimine kaitseb nüüd CRM-i. Logi sisse olemasoleva kontoga või loo sellele tööruumile esimene konto.",
+        "Firebase'i autentimine kaitseb nüüd CRM-i. Logi sisse olemasoleva kontoga või loo sellele tööruumile esimene konto.",
       email: "E-post",
       password: "Parool",
       signIn: "Logi sisse",
@@ -296,16 +378,15 @@ const messages: Record<Locale, DictionaryTree> = {
       createAccount: "Loo konto",
       connecting: "Firebase",
       loadingTitle: "Tööruumi ühendamine",
-      loadingSubtitle: "Kontrollin Firebase sessiooni enne CRM-i laadimist.",
-      syncingWorkspace: "Konto on valmis. Sünkroniseerin Firestore'ist viimased CRM andmed.",
-      featureOne: "Jagatud CRM seis salvestub nüüd Firestore'i, mitte ainult brauseri demoandmetesse.",
-      featureTwo: "Kõik AI mustandi route'id jäävad serverisse ja saavad kasutada sinu OpenAI mudelit.",
-      featureThree: "Microsoft Graphi saab lisada hiljem ilma ülejäänud töövoogu ümber tegemata.",
-      allowedOnly: "Lubatud kontod",
-      fillAllFields: "Täida nii e-post kui parool.",
+      loadingSubtitle: "Kontrollin Firebase'i sessiooni enne CRM-i laadimist.",
+      syncingWorkspace: "Konto on valmis. Sünkroniseerin Firestore'ist viimased CRM-i andmed.",
+      fillAllFields: "Täida nii e-post kui ka parool.",
       passwordHint: "Parool peab olema vähemalt 6 tähemärki pikk.",
       restrictedAccess:
         "See CRM on piiratud ainult kinnitatud kasutajatele. Kasuta ühte lubatud treeneri e-posti aadressidest.",
+      invalidCredentials: "E-post või parool on vale.",
+      emailInUse: "Selle e-posti aadressiga konto on juba olemas.",
+      requestFailed: "Firebase'i autentimise päring ebaõnnestus.",
     },
     help: {
       leadStatus:
@@ -315,7 +396,7 @@ const messages: Record<Locale, DictionaryTree> = {
       plannedActual:
         "Treeningu läbiviimise vaade hoiab plaanitud ja tegeliku soorituse eraldi, et treener saaks vahe kohe kirja panna.",
       aiDrafts:
-        "AI loob alati ainult mustandi. Treener vaatab üle, muudab ja kinnitab enne salvestamist või saatmist.",
+        "AI loob alati ainult mustandi. Treener vaatab selle üle, muudab ja kinnitab enne salvestamist või saatmist.",
       finance:
         "Finantsvaade ühendab müüdud paketid, maksete seisu, kuu laekumised ja kasutamata ettemakstud trennide kohustuse.",
       bodyAssessment:
@@ -327,12 +408,11 @@ const messages: Record<Locale, DictionaryTree> = {
       workoutPlan:
         "Aktiivne treeningkava on järgmise sessiooni eeltäidetud allikas, mida treener saab trennis linnukestega täita või muuta.",
       communication:
-        "Väljaminevad mustandid ja varasemad vastused on koondatud thread’idesse, et treener näeks kogu suhtlusajalugu enne kokkuvõtte saatmist.",
+        "Väljaminevad mustandid ja varasemad vastused on koondatud lõimedesse, et treener näeks kogu suhtlusajalugu enne kokkuvõtte saatmist.",
     },
     dashboard: {
       title: "Treeneri juhtpaneel",
-      subtitle:
-        "Tänane graafik, paketikohustus, AI mustandite järjekord ja klientide edenemine ühest vaatest.",
+      subtitle: "Tänane graafik, paketikohustus, AI-mustandite järjekord ja klientide edenemine ühest vaatest.",
       sessionsToday: "Tänased treeningud",
       activeClients: "Aktiivsed kliendid",
       openLeads: "Aktiivsed leadid",
@@ -343,6 +423,19 @@ const messages: Record<Locale, DictionaryTree> = {
       activity: "Viimased tegevused",
       packageLiability: "Kasutamata pakettide kohustus",
       outstanding: "Tasumata arved",
+      activeClientsDetail: "allkirjastatud nõusolekut",
+      openLeadsDetail: "proov juba broneeritud",
+      sessionsTodayFirst: "esimese trenni algus",
+      sessionsTodayNone: "Ühtegi aktiivset sessiooni pole täna laual",
+      receivedThisMonthDetail: "veel laekumata",
+      agendaSubtitle:
+        "Järgmised sessioonid toovad kalendri, paketid ja live-treeningu läbiviimise ühte vaatesse kokku.",
+      focusBoardSubtitle: "Kiire finants- ja hoidmispilt käesoleva kuu kohta.",
+      outstandingDetail: "Osaliselt või täielikult maksmata arved püsivad nähtaval kuni need on lõpuni tasutud.",
+      liabilityDetail: "Näitab ettemakstud trenne, mis on veel vaja ära teha.",
+      aiQueueSubtitle: "Mustandid, mis ootavad ülevaatust enne logimist või saatmist.",
+      aiQueueEmpty: "Genereeri treeningu kokkuvõte või kava uuendus, et järjekord täituks.",
+      activitySubtitle: "Viimased süsteemi ja treeneri tegevused.",
     },
     leads: {
       title: "Leadi toru",
@@ -352,6 +445,9 @@ const messages: Record<Locale, DictionaryTree> = {
       nextStep: "Järgmine samm",
       source: "Allikas",
       goal: "Eesmärk",
+      sectionSubtitle: "Muuda lead kliendiks siis, kui esimene sessioon või hindamine on müüdud.",
+      trialReadyDetail: "Valmis intake'iks ja makse ettevalmistuseks",
+      pipelineVisibleDetail: "Nähtav CRM-i torus",
     },
     clients: {
       title: "Kliendibaas",
@@ -361,6 +457,8 @@ const messages: Record<Locale, DictionaryTree> = {
       activePlan: "Aktiivne kava",
       packageLabel: "Paketi jääk",
       consent: "Nõusolek",
+      sectionSubtitle:
+        "Iga kliendikaart viib täisprofiili, kus on paketid, kavad, kehaanalüüsid ja suhtlusajalugu.",
     },
     clientProfile: {
       overview: "Profiili ülevaade",
@@ -368,11 +466,25 @@ const messages: Record<Locale, DictionaryTree> = {
       assessments: "Kehaanalüüsid",
       workouts: "Treeningkavad ja sessioonid",
       communication: "Suhtlusajalugu",
-      drafts: "Hiljutised AI mustandid",
+      drafts: "Hiljutised AI-mustandid",
       healthFlags: "Tervisefookused",
       latestAssessment: "Viimane kehaanalüüs",
       openActiveSession: "Ava aktiivne treeningvaade",
       noSession: "Järgmine treening pole veel kalendrisse pandud.",
+      missingTitle: "Klienti ei leitud",
+      missingBody: "Soovitud kliendiprofiili ei ole praeguses CRM-i seisus olemas.",
+      activePackageDetail: "aktiivne",
+      noActivePackage: "Aktiivne pakett puudub",
+      coachConfirmBlock: "Treener peaks kinnitama uue treeninguploki",
+      noAssessment: "Kehaanalüüsi ei ole veel salvestatud.",
+      nutritionCalories: "Kalorid",
+      nutritionProtein: "Valk",
+      nutritionCarbs: "Süsivesikud",
+      nutritionFats: "Rasvad",
+      nutritionHydration: "Vedelik",
+      nutritionPerDay: "kcal / päev",
+      nutritionGrams: "grammi",
+      nutritionLiters: "liitrit",
     },
     workout: {
       title: "Treeningu läbiviimine",
@@ -382,7 +494,7 @@ const messages: Record<Locale, DictionaryTree> = {
       coachNotes: "Treeneri märkused",
       athleteRecap: "Kliendile nähtavad märkused",
       planned: "Plaan",
-      actual: "Tegelikkus",
+      actual: "Tegelik",
       setDone: "Tehtud",
       addExercise: "Lisa harjutus",
       completeSession: "Märgi sessioon tehtuks",
@@ -392,24 +504,46 @@ const messages: Record<Locale, DictionaryTree> = {
       skipped: "Jäi ära",
       added: "Lisatud",
       modified: "Muudetud",
-      live: "Live logi",
-      emptyDraft:
-        "Mustand puudub. Genereeri kokkuvõte või järgmise trenni soovitus pärast sessiooni logi uuendamist.",
+      live: "Live-logi",
+      emptyDraft: "Mustand puudub. Genereeri kokkuvõte või järgmise trenni soovitus pärast sessiooni logi uuendamist.",
+      draftSubject: "Teema",
+      draftBody: "Mustandi sisu",
+      internalNote: "Sisemine märkus",
+      missingSessionTitle: "Sessiooni ei leitud",
+      missingSessionBody: "Soovitud sessioon puudub praeguses CRM-i seisus.",
+      missingWorkoutTitle: "Treeningulogi puudub",
+      missingWorkoutBody: "Selle sessiooni küljes ei ole veel live-treeningulogi.",
+      completedSetsDetail: "Tehtud seeriad",
+      modifiedExercisesDetail: "Kohapeal muudetud harjutused",
+      addedExercisesDetail: "Live'is lisatud harjutused",
+      skippedExercisesDetail: "Vahele jäänud plaanitud harjutused",
+      liveAdjustmentsAllowed: "Live-kohandused on lubatud",
+      restore: "Taasta",
+      skip: "Jäta vahele",
+      setColumn: "Seeria",
+      actualReps: "Tegelikud kordused",
+      actualWeight: "Tegelik kg",
+      rpe: "RPE",
+      exerciseNote: "Harjutuse märkus",
+      addLiveExercisePlaceholder: "Lisa uus live-harjutus",
+      aiTools: "AI tööriistad",
     },
     calendar: {
       title: "Kalender ja meeldetuletused",
       subtitle: "Nädalavaade, meeldetuletuste järjekord ja Outlooki sünkrooni valmisolek.",
-      reminderQueue: "Meeldetuletused",
+      reminderQueue: "Meeldetuletuste järjekord",
       syncState: "Sünkrooni staatus",
     },
     plans: {
       title: "Kohanduvad kavad",
       subtitle:
-        "Hoia igale kliendile aktiivset treeninguplokki ja toitumissuunda ning loo värskete andmete põhjal AI mustandi uuendusi.",
+        "Hoia igale kliendile aktiivset treeninguplokki ja toitumissuunda ning loo värskete andmete põhjal AI-mustandi uuendusi.",
       workoutBlock: "Treeninguplokk",
       nutritionPlan: "Toitumiskava",
       generateWorkout: "Genereeri treeninguploki mustand",
       generateNutrition: "Genereeri toitumise mustand",
+      sectionSubtitle: "Vali klient ja genereeri talle kas treeninguploki või toitumise mustand.",
+      clientLabel: "Klient",
     },
     communications: {
       title: "E-kirjad ja järeltegevused",
@@ -420,27 +554,39 @@ const messages: Record<Locale, DictionaryTree> = {
     },
     finance: {
       title: "Finantsülevaade",
-      subtitle:
-        "Jälgi kuu tulu, tasumata summasid, ettemakstud kohustust ja paketimüüki otse CRM-ist.",
+      subtitle: "Jälgi kuu tulu, tasumata summasid, ettemakstud kohustust ja paketimüüki otse CRM-ist.",
       invoices: "Arved",
       payments: "Laekumised",
       templates: "Paketikataloog",
       expiring: "Aeguvad paketid",
+      receivedDetail: "Sel kuul laekunud maksed",
+      outstandingDetail: "Vajab veel sisse kogumist",
+      liabilityDetail: "Ettemakstud trennid, mida pole veel tehtud",
+      expiringRemaining: "treeningut järel",
     },
     settings: {
       title: "Süsteemi valmisolek",
       subtitle:
-        "Tõlgete kaetus, paketimallid ja tulevane Firebase’i, OpenAI ning Microsoft Graphi integratsioonivalmidus.",
+        "Tõlgete kaetus, paketimallid ja tulevane Firebase'i, OpenAI ning Microsoft Graphi integratsioonivalmidus.",
       integrations: "Integratsioonide valmisolek",
       packageCatalog: "Vaikimisi paketikataloog",
       translation: "Tõlgete käitumine",
       translationNote:
-        "Inglise keel on vaikevalik. Eesti keeles muutuvad navigeerimine, abi-pop-up’id ja AI mustandite raamid samal ajal.",
+        "Inglise keel on vaikevalik. Eesti keeles muutuvad korraga navigeerimine, abiaknad ja AI-mustandite raamid.",
+      integrationFirebaseDetail:
+        "Firebase Auth ja Firestore'i salvestus on rakendusse juba seotud. Storage on seadistatud ja valmis kliendifailide jaoks, kui üleslaadimised lisanduvad.",
+      integrationOpenAIDetail:
+        "AI-route'id jooksevad serveripoolel ja kasutavad seadistatud OpenAI mudelit, hoides samal ajal alles deterministliku fallback'i juhuks, kui API pole saadaval.",
+      integrationMicrosoftDetail:
+        "Outlooki e-posti ja kalendri sünk on UI-s ja serverikihis modelleeritud. Lisa Microsofti rakenduse võtmed, et Graphi live-kutsed sisse lülitada.",
+      packageSession: "treeningut",
+      packagePerson: "inimene",
+      packagePeople: "inimest",
+      packageUpTo: "kuni",
     },
     activity: {
       title: "Tegevuslogi",
-      subtitle:
-        "Üks koondvoog konverteerimiste, sessioonimuudatuste, AI mustandite, meeldetuletuste ja saadetud kirjade jaoks.",
+      subtitle: "Üks koondvaade konverteerimiste, sessioonimuudatuste, AI-mustandite, meeldetuletuste ja saadetud kirjade jaoks.",
     },
     status: {
       new: "Uus",
@@ -468,7 +614,7 @@ const messages: Record<Locale, DictionaryTree> = {
       done: "Valmis",
       active: "Aktiivne",
       archived: "Arhiveeritud",
-      live: "Reaalajas",
+      live: "Live",
     },
   },
 };

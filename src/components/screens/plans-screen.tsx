@@ -53,12 +53,12 @@ export function PlansScreen() {
 
       <SectionCard
         title={t("nav.plans")}
-        subtitle="Choose a client, then generate either a workout block draft or a nutrition draft."
+        subtitle={t("plans.sectionSubtitle")}
         help={t("help.workoutPlan")}
       >
         <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
           <div className="space-y-4">
-            <DataLabel label="Client">
+            <DataLabel label={t("plans.clientLabel")}>
               <select
                 value={selectedClientId}
                 onChange={(event) => setSelectedClientId(event.target.value)}
@@ -94,13 +94,13 @@ export function PlansScreen() {
               <>
                 <TimelineItem
                   title={selectedClient.fullName}
-                  detail={selectedClient.goals.join(" · ")}
+                  detail={selectedClient.goals.join(" / ")}
                   meta={selectedClient.preferredLanguage.toUpperCase()}
                 />
                 {getClientWorkoutPlans(state, selectedClient.id).map((plan) => (
                   <TimelineItem
                     key={plan.id}
-                    title={`${t("plans.workoutBlock")} · ${plan.title}`}
+                    title={`${t("plans.workoutBlock")} / ${plan.title}`}
                     detail={plan.goal}
                     meta={formatDate(plan.updatedAt)}
                   />

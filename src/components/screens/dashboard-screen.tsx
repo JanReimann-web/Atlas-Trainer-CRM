@@ -46,33 +46,33 @@ export function DashboardScreen() {
         <StatCard
           label={t("dashboard.activeClients")}
           value={String(activeClients)}
-          detail={`${state.clients.filter((client) => client.consentStatus === "signed").length} signed consents`}
+          detail={`${state.clients.filter((client) => client.consentStatus === "signed").length} ${t("dashboard.activeClientsDetail")}`}
         />
         <StatCard
           label={t("dashboard.openLeads")}
           value={String(openLeads)}
-          detail={`${state.leads.filter((lead) => lead.status === "trial-booked").length} with a trial already booked`}
+          detail={`${state.leads.filter((lead) => lead.status === "trial-booked").length} ${t("dashboard.openLeadsDetail")}`}
         />
         <StatCard
           label={t("dashboard.sessionsToday")}
           value={String(sessionsToday.length)}
           detail={
             sessionsToday[0]
-              ? `${formatDate(sessionsToday[0].startAt)} first session start`
-              : "No live sessions on the board"
+              ? `${formatDate(sessionsToday[0].startAt)} / ${t("dashboard.sessionsTodayFirst")}`
+              : t("dashboard.sessionsTodayNone")
           }
         />
         <StatCard
           label={t("dashboard.receivedThisMonth")}
           value={formatCurrency(monthlyRevenue)}
-          detail={`${formatCurrency(outstanding)} still outstanding`}
+          detail={`${formatCurrency(outstanding)} ${t("dashboard.receivedThisMonthDetail")}`}
         />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.3fr_1fr]">
         <SectionCard
           title={t("dashboard.agenda")}
-          subtitle="Upcoming sessions connect calendar, packages, and live workout execution from a single place."
+          subtitle={t("dashboard.agendaSubtitle")}
           help={t("help.calendar")}
         >
           <div className="space-y-3">
@@ -88,7 +88,7 @@ export function DashboardScreen() {
                     <div>
                       <p className="font-semibold text-[color:var(--ink)]">{session.title}</p>
                       <p className="text-sm leading-6 text-[color:var(--muted-ink)]">
-                        {client?.fullName} · {session.location}
+                        {client?.fullName} / {session.location}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -107,18 +107,18 @@ export function DashboardScreen() {
         <div className="grid gap-6">
           <SectionCard
             title={t("dashboard.focusBoard")}
-            subtitle="Quick financial and retention exposure for the current month."
+            subtitle={t("dashboard.focusBoardSubtitle")}
             help={t("help.finance")}
           >
             <div className="grid gap-3">
               <TimelineItem
                 title={t("dashboard.outstanding")}
-                detail="Invoices with partial or missing payments remain visible until fully settled."
+                detail={t("dashboard.outstandingDetail")}
                 meta={formatCurrency(outstanding)}
               />
               <TimelineItem
                 title={t("dashboard.packageLiability")}
-                detail="Represents prepaid sessions that still need to be delivered."
+                detail={t("dashboard.liabilityDetail")}
                 meta={formatCurrency(liability)}
               />
             </div>
@@ -126,15 +126,12 @@ export function DashboardScreen() {
 
           <SectionCard
             title={t("dashboard.aiQueue")}
-            subtitle="Drafts waiting for review before they are logged or sent."
+            subtitle={t("dashboard.aiQueueSubtitle")}
             help={t("help.aiDrafts")}
           >
             <div className="space-y-3">
               {aiQueue.length === 0 ? (
-                <EmptyState
-                  title={t("common.none")}
-                  body="Generate a workout recap or plan update to fill the review queue."
-                />
+                <EmptyState title={t("common.none")} body={t("dashboard.aiQueueEmpty")} />
               ) : (
                 aiQueue.map((draft) => (
                   <Link
@@ -161,7 +158,7 @@ export function DashboardScreen() {
         </div>
       </div>
 
-      <SectionCard title={t("dashboard.activity")} subtitle="Recent system and coach actions.">
+      <SectionCard title={t("dashboard.activity")} subtitle={t("dashboard.activitySubtitle")}>
         <div className="grid gap-3 md:grid-cols-2">
           {state.activityEvents.slice(0, 6).map((event) => (
             <TimelineItem

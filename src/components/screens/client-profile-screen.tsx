@@ -29,12 +29,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
   const client = getClient(state, clientId);
 
   if (!client) {
-    return (
-      <EmptyState
-        title="Client not found"
-        body="The requested client profile does not exist in the demo dataset."
-      />
-    );
+    return <EmptyState title={t("clientProfile.missingTitle")} body={t("clientProfile.missingBody")} />;
   }
 
   const purchases = getClientPurchases(state, clientId);
@@ -56,7 +51,11 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
         <StatCard
           label={t("clients.packageLabel")}
           value={String(purchases[0] ? getRemainingUnits(purchases[0]) : 0)}
-          detail={purchases[0] ? `${getPackageTemplate(state, purchases[0].templateId)?.name} active` : "No active package"}
+          detail={
+            purchases[0]
+              ? `${getPackageTemplate(state, purchases[0].templateId)?.name} / ${t("clientProfile.activePackageDetail")}`
+              : t("clientProfile.noActivePackage")
+          }
         />
         <StatCard
           label={t("clients.nextSession")}
@@ -66,14 +65,14 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
         <StatCard
           label={t("clients.activePlan")}
           value={activePlan ? "1" : "0"}
-          detail={activePlan?.title ?? "Coach should confirm a new block"}
+          detail={activePlan?.title ?? t("clientProfile.coachConfirmBlock")}
         />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <SectionCard
           title={t("clientProfile.overview")}
-          subtitle={`${client.email} · ${client.phone}`}
+          subtitle={`${client.email} / ${client.phone}`}
           help={t("help.bodyAssessment")}
           aside={
             nextSession ? (
@@ -117,7 +116,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                   <p className="text-sm leading-6 text-[color:var(--muted-ink)]">{assessments[0].notes}</p>
                 </div>
               ) : (
-                <EmptyState title={t("common.none")} body="No body assessment has been recorded yet." />
+                <EmptyState title={t("common.none")} body={t("clientProfile.noAssessment")} />
               )}
             </div>
           </div>
@@ -134,7 +133,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                     <div>
                       <p className="font-semibold text-[color:var(--ink)]">{template?.name}</p>
                       <p className="text-sm text-[color:var(--muted-ink)]">
-                        {formatDate(purchase.purchasedAt)} · {formatCurrency(purchase.price)}
+                        {formatDate(purchase.purchasedAt)} / {formatCurrency(purchase.price)}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -218,11 +217,31 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
       {nutritionPlan ? (
         <SectionCard title={t("plans.nutritionPlan")}>
           <div className="grid gap-4 md:grid-cols-5">
-            <StatCard label="Calories" value={String(nutritionPlan.calories)} detail="kcal / day" />
-            <StatCard label="Protein" value={String(nutritionPlan.proteinGrams)} detail="grams" />
-            <StatCard label="Carbs" value={String(nutritionPlan.carbsGrams)} detail="grams" />
-            <StatCard label="Fats" value={String(nutritionPlan.fatsGrams)} detail="grams" />
-            <StatCard label="Hydration" value={String(nutritionPlan.hydrationLiters)} detail="liters" />
+            <StatCard
+              label={t("clientProfile.nutritionCalories")}
+              value={String(nutritionPlan.calories)}
+              detail={t("clientProfile.nutritionPerDay")}
+            />
+            <StatCard
+              label={t("clientProfile.nutritionProtein")}
+              value={String(nutritionPlan.proteinGrams)}
+              detail={t("clientProfile.nutritionGrams")}
+            />
+            <StatCard
+              label={t("clientProfile.nutritionCarbs")}
+              value={String(nutritionPlan.carbsGrams)}
+              detail={t("clientProfile.nutritionGrams")}
+            />
+            <StatCard
+              label={t("clientProfile.nutritionFats")}
+              value={String(nutritionPlan.fatsGrams)}
+              detail={t("clientProfile.nutritionGrams")}
+            />
+            <StatCard
+              label={t("clientProfile.nutritionHydration")}
+              value={String(nutritionPlan.hydrationLiters)}
+              detail={t("clientProfile.nutritionLiters")}
+            />
           </div>
         </SectionCard>
       ) : null}

@@ -68,12 +68,17 @@ export function CalendarScreen() {
           <div className="space-y-3">
             {state.reminders.map((reminder) => {
               const client = getClient(state, reminder.clientId);
+              const channelLabel =
+                reminder.channel === "calendar"
+                  ? t("common.calendarChannel")
+                  : t("common.emailChannel");
+
               return (
                 <TimelineItem
                   key={reminder.id}
-                  title={`${reminder.title} · ${client?.fullName ?? ""}`}
-                  detail={`${reminder.channel.toUpperCase()} · ${formatDate(reminder.dueAt)}`}
-                  meta={reminder.status}
+                  title={`${reminder.title} / ${client?.fullName ?? ""}`}
+                  detail={`${channelLabel} / ${formatDate(reminder.dueAt)}`}
+                  meta={t(`status.${reminder.status}`)}
                   actions={
                     reminder.status !== "done" ? (
                       <button

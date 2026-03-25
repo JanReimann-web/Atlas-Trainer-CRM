@@ -145,11 +145,46 @@ export function DataLabel({
   );
 }
 
+export function LanguageToggle({
+  compact = false,
+  showLabel = false,
+}: {
+  compact?: boolean;
+  showLabel?: boolean;
+}) {
+  const { locale, setLocale, t } = useLocaleContext();
+
+  return (
+    <div className={compact ? "space-y-2" : "space-y-3"}>
+      {showLabel ? (
+        <div className="flex items-center justify-between">
+          <span className="font-medium text-[color:var(--ink)]">{t("app.locale")}</span>
+          <InfoHint content={t("app.localeHelp")} />
+        </div>
+      ) : null}
+      <div className="grid grid-cols-2 gap-2 rounded-full bg-[color:var(--sand-2)] p-1">
+        {(["en", "et"] as const).map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => setLocale(item)}
+            className={`rounded-full px-3 py-2 text-sm font-semibold transition ${
+              locale === item ? "bg-[color:var(--ink)] text-white" : "text-[color:var(--ink)]"
+            }`}
+          >
+            {item.toUpperCase()}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { state, persistenceMode } = useCRM();
   const { user, liveData, firebaseConfigured, signOutUser } = useAuth();
-  const { locale, setLocale, t, formatDate } = useLocaleContext();
+  const { t, formatDate } = useLocaleContext();
   const nextSession = useMemo(() => getUpcomingSessions(state, 1)[0], [state]);
 
   const navItems = [
@@ -203,26 +238,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="rounded-[28px] border border-[color:var(--line-soft)] bg-white/75 p-4 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="font-medium text-[color:var(--ink)]">{t("app.locale")}</span>
-              <InfoHint content={t("app.localeHelp")} />
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {(["en", "et"] as const).map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => setLocale(item)}
-                  className={`rounded-2xl px-3 py-2 text-sm font-semibold transition ${
-                    locale === item
-                      ? "bg-[color:var(--ink)] text-white"
-                      : "bg-[color:var(--sand-2)] text-[color:var(--ink)]"
-                  }`}
-                >
-                  {item.toUpperCase()}
-                </button>
-              ))}
-            </div>
+            <LanguageToggle showLabel />
           </div>
         </aside>
 
@@ -247,30 +263,35 @@ export function AppShell({ children }: { children: ReactNode }) {
                       href={`/clients/${nextSession.primaryClientId}/sessions/${nextSession.id}`}
                       className="rounded-full bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-white"
                     >
-                      {t("app.upcomingSession")} · {formatDate(nextSession.startAt)}
+                      {t("app.upcomingSession")} / {formatDate(nextSession.startAt)}
                     </Link>
                   ) : null}
                 </div>
               </div>
 
-              <div className="rounded-[24px] bg-[color:var(--sand-2)] px-4 py-3 text-sm leading-6 text-[color:var(--muted-ink)]">
-                <p className="font-semibold text-[color:var(--ink)]">
-                  {liveData ? t("common.firebaseConnected") : t("common.outlookReady")}
-                </p>
-                <p>
-                  {liveData
-                    ? t("common.firebaseConnectedDetail")
-                    : "UI and server routes are ready for later Microsoft Graph credentials."}
-                </p>
-                {firebaseConfigured && persistenceMode === "firebase" ? (
-                  <button
-                    type="button"
-                    onClick={() => void signOutUser()}
-                    className="mt-3 rounded-full bg-[color:var(--ink)] px-3 py-1.5 text-xs font-semibold text-white"
-                  >
-                    {t("auth.signOut")}
-                  </button>
-                ) : null}
+              <div className="flex flex-col gap-3 md:items-end">
+                <div className="w-full md:hidden">
+                  <LanguageToggle compact />
+                </div>
+                <div className="rounded-[24px] bg-[color:var(--sand-2)] px-4 py-3 text-sm leading-6 text-[color:var(--muted-ink)]">
+                  <p className="font-semibold text-[color:var(--ink)]">
+                    {liveData ? t("common.firebaseConnected") : t("common.outlookReady")}
+                  </p>
+                  <p>
+                    {liveData
+                      ? t("common.firebaseConnectedDetail")
+                      : t("common.integrationFallbackDetail")}
+                  </p>
+                  {firebaseConfigured && persistenceMode === "firebase" ? (
+                    <button
+                      type="button"
+                      onClick={() => void signOutUser()}
+                      className="mt-3 rounded-full bg-[color:var(--ink)] px-3 py-1.5 text-xs font-semibold text-white"
+                    >
+                      {t("auth.signOut")}
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
           </header>
