@@ -148,6 +148,10 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     event.preventDefault();
     setProfileError(null);
 
+    if (!client) {
+      return;
+    }
+
     if (!profileForm.fullName.trim() || !profileForm.email.trim() || !profileForm.goalsText.trim()) {
       setProfileError(t("forms.requiredError"));
       return;
