@@ -137,7 +137,7 @@ export function ClientsScreen() {
 
   return (
     <div className="space-y-6">
-      <PageLead eyebrow={t("nav.clients")} title={t("clients.title")} subtitle={t("clients.subtitle")} />
+      <PageLead eyebrow={t("nav.clients")} title={t("clients.title")} />
 
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <SectionCard title={t("forms.clientTitle")} subtitle={t("forms.clientSubtitle")}>

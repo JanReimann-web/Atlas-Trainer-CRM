@@ -283,7 +283,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
 
   return (
     <div className="space-y-6">
-      <PageLead eyebrow={t("nav.clients")} title={client.fullName} subtitle={client.notes} />
+      <PageLead eyebrow={t("nav.clients")} title={client.fullName} />
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard
@@ -310,14 +310,13 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <SectionCard
           title={t("clientProfile.overview")}
-          subtitle={`${client.email} / ${client.phone}`}
           help={t("help.bodyAssessment")}
           aside={
             <div className="flex flex-wrap gap-3">
               {nextSession ? (
                 <Link
                   href={`/clients/${client.id}/sessions/${nextSession.id}`}
-                  className="rounded-full bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-white"
+                  className="inline-flex items-center justify-center rounded-full bg-[color:var(--ink)] px-4 py-2 text-center text-sm font-semibold text-white shadow-[0_12px_28px_rgba(27,39,33,0.18)]"
                 >
                   {t("clientProfile.openActiveSession")}
                 </Link>
@@ -387,7 +386,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="mt-6 grid gap-6 md:grid-cols-2">
             <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
               <p className="font-semibold text-[color:var(--ink)]">{t("clientProfile.healthFlags")}</p>
               <div className="mt-3 space-y-3">
