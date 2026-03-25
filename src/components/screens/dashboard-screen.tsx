@@ -157,19 +157,6 @@ export function DashboardScreen() {
           </SectionCard>
         </div>
       </div>
-
-      <SectionCard title={t("dashboard.activity")} subtitle={t("dashboard.activitySubtitle")}>
-        <div className="grid gap-3 md:grid-cols-2">
-          {state.activityEvents.slice(0, 6).map((event) => (
-            <TimelineItem
-              key={event.id}
-              title={event.type}
-              detail={event.detail}
-              meta={formatDate(event.createdAt)}
-            />
-          ))}
-        </div>
-      </SectionCard>
     </div>
   );
 }
