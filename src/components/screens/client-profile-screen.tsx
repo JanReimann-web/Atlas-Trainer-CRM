@@ -316,9 +316,15 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
               {nextSession ? (
                 <Link
                   href={`/clients/${client.id}/sessions/${nextSession.id}`}
-                  className="inline-flex items-center justify-center rounded-full bg-[color:var(--ink)] px-4 py-2 text-center text-sm font-semibold text-white shadow-[0_12px_28px_rgba(27,39,33,0.18)]"
+                  className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[color:var(--ink)] bg-[color:var(--ink)] px-5 py-3 text-sm font-semibold leading-none text-white shadow-[0_14px_30px_rgba(27,39,33,0.22)]"
                 >
-                  {t("clientProfile.openActiveSession")}
+                  <span
+                    aria-hidden="true"
+                    className="flex h-6 w-6 items-center justify-center rounded-full bg-white/12 text-base leading-none text-white"
+                  >
+                    &gt;
+                  </span>
+                  <span className="text-white">{t("clientProfile.openActiveSession")}</span>
                 </Link>
               ) : null}
               <button
