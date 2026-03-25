@@ -202,13 +202,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-[color:var(--background)] text-[color:var(--ink)]">
       <div className="mx-auto grid min-h-screen max-w-[1600px] grid-cols-1 gap-6 px-4 py-4 lg:grid-cols-[280px_minmax(0,1fr)] lg:px-6">
-        <aside className="panel-surface hidden rounded-[36px] p-5 lg:flex lg:flex-col lg:justify-between">
+        <aside className="panel-surface hidden rounded-[36px] p-5 lg:flex lg:flex-col">
           <div className="space-y-8">
             <div className="rounded-[28px] bg-[color:var(--sand-2)] p-5">
-              <p className="text-xs uppercase tracking-[0.28em] text-[color:var(--muted-ink)]">
-                {liveData ? t("app.liveMode") : t("app.demoMode")}
-              </p>
-              <h1 className="mt-3 font-display text-4xl leading-none text-[color:var(--ink)]">
+              <h1 className="font-display text-4xl leading-none text-[color:var(--ink)]">
                 {t("app.name")}
               </h1>
               <p className="mt-3 text-sm leading-6 text-[color:var(--muted-ink)]">
@@ -235,10 +232,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                 );
               })}
             </nav>
-          </div>
 
-          <div className="rounded-[28px] border border-[color:var(--line-soft)] bg-white/75 p-4 text-sm">
-            <LanguageToggle showLabel />
+            <div className="rounded-[28px] border border-[color:var(--line-soft)] bg-white/75 p-4 text-sm">
+              <LanguageToggle showLabel />
+            </div>
           </div>
         </aside>
 

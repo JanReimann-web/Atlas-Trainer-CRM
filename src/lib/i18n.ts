@@ -8,7 +8,7 @@ const messages: Record<Locale, DictionaryTree> = {
   en: {
     app: {
       name: "Atlas Trainer CRM",
-      tagline: "Coaching operations, workout execution, and AI-assisted follow-up in one flow.",
+      tagline: "Personal trainer workspace for workouts, client management, and AI assistance.",
       demoMode: "Demo data mode",
       liveMode: "Firebase live mode",
       upcomingSession: "Open next session",
@@ -363,7 +363,7 @@ const messages: Record<Locale, DictionaryTree> = {
   et: {
     app: {
       name: "Atlas Trainer CRM",
-      tagline: "Treeneri töölaud treeningute, kliendihalduse ja AI-mustanditega ühes voos.",
+      tagline: "Personaalreeneri töölaud, treeningute, kliendihalduse ja AI-assistendiga.",
       demoMode: "Demoandmete režiim",
       liveMode: "Firebase live-režiim",
       upcomingSession: "Ava järgmine trenn",
