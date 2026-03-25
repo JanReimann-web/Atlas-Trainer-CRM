@@ -906,6 +906,11 @@ export const initialCRMState: CRMState = {
         "Portable breakfast option for travel days",
         "1 planned flexible meal on weekends",
       ],
+      breakfastSharePercent: 28,
+      lunchSharePercent: 34,
+      dinnerSharePercent: 38,
+      coachRecommendation:
+        "Hoia hommikusöök lihtne ja valgurikas ka reisipäevadel. Viimase kehaanalüüsi järgi töötab praegune suund hästi, seega keskendu stabiilsele energiatasemele ja õhtuse ülesöömise vältimisele.",
       createdAt: "2026-03-02T09:00:00.000Z",
       updatedAt: "2026-03-22T09:00:00.000Z",
       origin: "ai",
@@ -925,6 +930,11 @@ export const initialCRMState: CRMState = {
         "Protein + carbs after duo training",
         "Weekend meal prep fallback",
       ],
+      breakfastSharePercent: 24,
+      lunchSharePercent: 34,
+      dinnerSharePercent: 42,
+      coachRecommendation:
+        "Lisa kõige kindlam lisakalorite aken pärastlõunasse, sest just seal kipub tal intake kõikuma. Viimane mõõtmine toetab massifaasi jätkamist, nii et fookus jääb järjepidevale söömisrütmile.",
       createdAt: "2026-03-12T12:00:00.000Z",
       updatedAt: "2026-03-22T12:00:00.000Z",
       origin: "coach",

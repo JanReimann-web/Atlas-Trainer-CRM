@@ -273,6 +273,10 @@ export interface NutritionPlan {
   fatsGrams: number;
   hydrationLiters: number;
   principles: string[];
+  breakfastSharePercent: number;
+  lunchSharePercent: number;
+  dinnerSharePercent: number;
+  coachRecommendation: string;
   createdAt: string;
   updatedAt: string;
   origin: "coach" | "ai";

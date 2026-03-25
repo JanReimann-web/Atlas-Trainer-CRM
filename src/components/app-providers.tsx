@@ -22,7 +22,13 @@ import { saveCRMState, subscribeToCRMState } from "@/lib/firebase/crm-store";
 import { initialCRMState } from "@/lib/mock-data";
 import { translate } from "@/lib/i18n";
 import {
+  getClientAssessments,
+  getClientNutritionPlans,
+  getClientSessions,
+} from "@/lib/selectors";
+import {
   AIDraft,
+  BodyAssessment,
   CRMState,
   ClientProfile,
   CreateBodyAssessmentInput,
@@ -30,6 +36,7 @@ import {
   CreateLeadInput,
   CreatePackagePurchaseInput,
   Locale,
+  NutritionPlan,
   SessionExercise,
   SessionWorkout,
 } from "@/lib/types";
@@ -89,6 +96,12 @@ type CRMContextValue = {
   ) => void;
   addExercise: (sessionId: string, name: string) => void;
   completeSession: (sessionId: string) => void;
+  refreshNutritionPlan: (args: {
+    clientId: string;
+    clientOverride?: ClientProfile;
+    assessmentsOverride?: BodyAssessment[];
+    trigger?: "manual" | "profile-update" | "assessment-update" | "client-create";
+  }) => Promise<void>;
   upsertDraft: (draft: AIDraft) => void;
   updateDraft: (draftId: string, patch: Partial<AIDraft>) => void;
   sendDraftToTimeline: (draftId: string) => void;
@@ -230,6 +243,25 @@ function formatAuthError(locale: Locale, error: unknown) {
   return message;
 }
 
+function describeNutritionRefreshTrigger(
+  trigger: "manual" | "profile-update" | "assessment-update" | "client-create",
+  clientName: string,
+) {
+  if (trigger === "manual") {
+    return `Generated AI nutrition guidance for ${clientName}.`;
+  }
+
+  if (trigger === "assessment-update") {
+    return `Refreshed AI nutrition guidance for ${clientName} after a body assessment update.`;
+  }
+
+  if (trigger === "client-create") {
+    return `Generated initial AI nutrition guidance for ${clientName}.`;
+  }
+
+  return `Refreshed AI nutrition guidance for ${clientName} after a profile update.`;
+}
+
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const firebaseConfigured = isFirebaseConfigured();
   const [locale, setLocaleState] = useState<Locale>(() => {
@@ -247,6 +279,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   const [crmLoading, setCrmLoading] = useState(firebaseConfigured);
   const [crmError, setCrmError] = useState<string | null>(null);
   const saveQueueRef = useRef(Promise.resolve());
+  const stateRef = useRef(state);
 
   useEffect(() => {
     localStorage.setItem(LOCALE_STORAGE_KEY, locale);
@@ -260,6 +293,10 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
     localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
   }, [firebaseConfigured, state]);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   useEffect(() => {
     if (!firebaseConfigured) {
@@ -446,6 +483,115 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     },
   };
 
+  async function refreshNutritionPlan({
+    clientId,
+    clientOverride,
+    assessmentsOverride,
+    trigger = "manual",
+  }: {
+    clientId: string;
+    clientOverride?: ClientProfile;
+    assessmentsOverride?: BodyAssessment[];
+    trigger?: "manual" | "profile-update" | "assessment-update" | "client-create";
+  }) {
+    const snapshot = stateRef.current;
+    const client =
+      clientOverride ?? snapshot.clients.find((item) => item.id === clientId);
+    if (!client) {
+      return;
+    }
+
+    const recentAssessments =
+      assessmentsOverride ?? getClientAssessments(snapshot, clientId);
+    const recentSessions = getClientSessions(snapshot, clientId);
+    const currentNutritionPlan =
+      getClientNutritionPlans(snapshot, clientId).find((plan) => plan.status === "active") ??
+      null;
+
+    try {
+      const response = await fetch("/api/ai/nutrition-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          locale: client.preferredLanguage,
+          client,
+          currentNutritionPlan,
+          recentAssessments,
+          recentSessions,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Nutrition plan generation failed.");
+      }
+
+      const payload = (await response.json()) as {
+        plan: Omit<
+          NutritionPlan,
+          "id" | "clientId" | "status" | "createdAt" | "updatedAt" | "origin"
+        >;
+      };
+
+      applyCRMUpdate((previous) => {
+        const now = timestamp();
+        const existingActivePlan = previous.nutritionPlans.find(
+          (plan) => plan.clientId === clientId && plan.status === "active",
+        );
+        const nextPlan: NutritionPlan = {
+          id: existingActivePlan?.id ?? `np-${crypto.randomUUID()}`,
+          clientId,
+          title: payload.plan.title,
+          status: "active",
+          calories: payload.plan.calories,
+          proteinGrams: payload.plan.proteinGrams,
+          carbsGrams: payload.plan.carbsGrams,
+          fatsGrams: payload.plan.fatsGrams,
+          hydrationLiters: payload.plan.hydrationLiters,
+          principles: payload.plan.principles,
+          breakfastSharePercent: payload.plan.breakfastSharePercent,
+          lunchSharePercent: payload.plan.lunchSharePercent,
+          dinnerSharePercent: payload.plan.dinnerSharePercent,
+          coachRecommendation: payload.plan.coachRecommendation,
+          createdAt: existingActivePlan?.createdAt ?? now,
+          updatedAt: now,
+          origin: "ai",
+        };
+
+        return {
+          ...previous,
+          nutritionPlans: [
+            nextPlan,
+            ...previous.nutritionPlans
+              .filter((plan) => plan.id !== nextPlan.id)
+              .map((plan) =>
+                plan.clientId === clientId && plan.status === "active"
+                  ? { ...plan, status: "archived" as const }
+                  : plan,
+              ),
+          ],
+          activityEvents: [
+            {
+              id: `act-${crypto.randomUUID()}`,
+              actor: "AI",
+              clientId,
+              type: "nutrition.updated",
+              detail: describeNutritionRefreshTrigger(trigger, client.fullName),
+              createdAt: now,
+            },
+            ...previous.activityEvents,
+          ],
+        };
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Nutrition plan generation failed.";
+      setCrmError(message);
+      throw error;
+    }
+  }
+
   const crmValue: CRMContextValue = {
     state,
     loading: authLoading || crmLoading,
@@ -483,9 +629,15 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           ],
         };
       }),
-    createClient: (input) =>
+    createClient: (input) => {
+      let createdClient: ClientProfile | null = null;
+
       applyCRMUpdate((previous) => {
-        if (previous.clients.some((client) => client.email.toLowerCase() === input.email.toLowerCase())) {
+        if (
+          previous.clients.some(
+            (client) => client.email.toLowerCase() === input.email.toLowerCase(),
+          )
+        ) {
           return previous;
         }
 
@@ -496,6 +648,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           ownerId: previous.users[0]?.id ?? "user-maria",
           avatarHue: randomHue(),
         };
+        createdClient = client;
 
         return {
           ...previous,
@@ -512,8 +665,20 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
             ...previous.activityEvents,
           ],
         };
-      }),
-    createClientFromLead: (leadId, input) =>
+      });
+
+      const createdClientSnapshot = createdClient as ClientProfile | null;
+      if (createdClientSnapshot) {
+        void refreshNutritionPlan({
+          clientId: createdClientSnapshot.id,
+          clientOverride: createdClientSnapshot,
+          trigger: "client-create",
+        });
+      }
+    },
+    createClientFromLead: (leadId, input) => {
+      let createdClient: ClientProfile | null = null;
+
       applyCRMUpdate((previous) => {
         const lead = previous.leads.find((item) => item.id === leadId);
         if (!lead) {
@@ -538,6 +703,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           ownerId: previous.users[0]?.id ?? "user-maria",
           avatarHue: randomHue(),
         };
+        createdClient = client;
 
         const now = timestamp();
 
@@ -571,8 +737,20 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
             ...previous.activityEvents,
           ],
         };
-      }),
-    updateClient: (clientId, input) =>
+      });
+
+      const createdClientSnapshot = createdClient as ClientProfile | null;
+      if (createdClientSnapshot) {
+        void refreshNutritionPlan({
+          clientId: createdClientSnapshot.id,
+          clientOverride: createdClientSnapshot,
+          trigger: "client-create",
+        });
+      }
+    },
+    updateClient: (clientId, input) => {
+      let updatedClient: ClientProfile | null = null;
+
       applyCRMUpdate((previous) => {
         const existingClient = previous.clients.find((client) => client.id === clientId);
         if (!existingClient) {
@@ -580,6 +758,10 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         }
 
         const now = timestamp();
+        updatedClient = {
+          ...existingClient,
+          ...input,
+        };
         const relatedLead = previous.leads.find(
           (lead) =>
             lead.id === existingClient.originLeadId ||
@@ -627,7 +809,17 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
             ...previous.activityEvents,
           ],
         };
-      }),
+      });
+
+      const updatedClientSnapshot = updatedClient as ClientProfile | null;
+      if (updatedClientSnapshot) {
+        void refreshNutritionPlan({
+          clientId,
+          clientOverride: updatedClientSnapshot,
+          trigger: "profile-update",
+        });
+      }
+    },
     addPackagePurchase: (input) =>
       applyCRMUpdate((previous) => {
         const template = previous.packageTemplates.find((item) => item.id === input.templateId);
@@ -711,8 +903,14 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           ],
         };
       }),
-    addBodyAssessment: (input) =>
+    addBodyAssessment: (input) => {
+      let assessmentSnapshot: BodyAssessment | null = null;
+      let priorAssessments: BodyAssessment[] = [];
+
       applyCRMUpdate((previous) => {
+        priorAssessments = previous.bodyAssessments.filter(
+          (assessment) => assessment.clientId === input.clientId,
+        );
         const metrics = input.metrics
           .filter((metric) => metric.label.trim() && metric.unit.trim())
           .map((metric) => ({
@@ -726,19 +924,19 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           return previous;
         }
 
+        const nextAssessment: BodyAssessment = {
+          id: `ba-${crypto.randomUUID()}`,
+          clientId: input.clientId,
+          recordedAt: input.recordedAt,
+          recordedBy: previous.users[0]?.id ?? "user-maria",
+          notes: input.notes,
+          metrics,
+        };
+        assessmentSnapshot = nextAssessment;
+
         return {
           ...previous,
-          bodyAssessments: [
-            {
-              id: `ba-${crypto.randomUUID()}`,
-              clientId: input.clientId,
-              recordedAt: input.recordedAt,
-              recordedBy: previous.users[0]?.id ?? "user-maria",
-              notes: input.notes,
-              metrics,
-            },
-            ...previous.bodyAssessments,
-          ],
+          bodyAssessments: [nextAssessment, ...previous.bodyAssessments],
           activityEvents: [
             {
               id: `act-${crypto.randomUUID()}`,
@@ -751,8 +949,20 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
             ...previous.activityEvents,
           ],
         };
-      }),
-    convertLeadToClient: (leadId) =>
+      });
+
+      const assessmentToRefresh = assessmentSnapshot as BodyAssessment | null;
+      if (assessmentToRefresh) {
+        void refreshNutritionPlan({
+          clientId: input.clientId,
+          assessmentsOverride: [assessmentToRefresh, ...priorAssessments],
+          trigger: "assessment-update",
+        });
+      }
+    },
+    convertLeadToClient: (leadId) => {
+      let createdClient: ClientProfile | null = null;
+
       applyCRMUpdate((previous) => {
         const lead = previous.leads.find((item) => item.id === leadId);
         if (!lead || previous.clients.some((client) => client.email === lead.email)) {
@@ -763,6 +973,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           ...buildClientProfileFromLead(lead, previous.users[0]?.id ?? "user-maria"),
           id: `client-${lead.id.replace("lead-", "")}`,
         };
+        createdClient = client;
 
         return {
           ...previous,
@@ -782,7 +993,17 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
             ...previous.activityEvents,
           ],
         };
-      }),
+      });
+
+      const createdClientSnapshot = createdClient as ClientProfile | null;
+      if (createdClientSnapshot) {
+        void refreshNutritionPlan({
+          clientId: createdClientSnapshot.id,
+          clientOverride: createdClientSnapshot,
+          trigger: "client-create",
+        });
+      }
+    },
     updateLeadStatus: (leadId, status) =>
       applyCRMUpdate((previous) => ({
         ...previous,
@@ -912,6 +1133,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           ],
         };
       }),
+    refreshNutritionPlan,
     upsertDraft: (draft) =>
       applyCRMUpdate((previous) => {
         const exists = previous.aiDrafts.some((item) => item.id === draft.id);

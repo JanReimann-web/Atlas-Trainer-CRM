@@ -102,12 +102,20 @@ function buildClientProfileForm(client?: ClientProfile | null) {
 }
 
 export function ClientProfileScreen({ clientId }: { clientId: string }) {
-  const { state, addPackagePurchase, addBodyAssessment, updateClient } = useCRM();
+  const {
+    state,
+    addPackagePurchase,
+    addBodyAssessment,
+    updateClient,
+    refreshNutritionPlan,
+  } = useCRM();
   const { t, formatDate, formatCurrency } = useLocaleContext();
   const client = getClient(state, clientId);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState(() => buildClientProfileForm(client));
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [nutritionError, setNutritionError] = useState<string | null>(null);
+  const [isNutritionRefreshing, setIsNutritionRefreshing] = useState(false);
   const [packageForm, setPackageForm] = useState({
     templateId: state.packageTemplates[0]?.id ?? "",
     purchasedDate: dateInputValue(),
@@ -143,6 +151,43 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
   const nextSession = getClientUpcomingSession(state, clientId);
   const drafts = getClientDrafts(state, clientId).slice(0, 3);
   const messages = getClientMessages(state, clientId).slice(0, 4);
+  const mealDistribution = nutritionPlan
+    ? [
+        {
+          key: "breakfast",
+          label: t("clientProfile.breakfast"),
+          share: nutritionPlan.breakfastSharePercent,
+        },
+        {
+          key: "lunch",
+          label: t("clientProfile.lunch"),
+          share: nutritionPlan.lunchSharePercent,
+        },
+        {
+          key: "dinner",
+          label: t("clientProfile.dinner"),
+          share: nutritionPlan.dinnerSharePercent,
+        },
+      ]
+    : [];
+
+  async function handleManualNutritionRefresh() {
+    setNutritionError(null);
+    setIsNutritionRefreshing(true);
+
+    try {
+      await refreshNutritionPlan({
+        clientId,
+        trigger: "manual",
+      });
+    } catch (error) {
+      setNutritionError(
+        error instanceof Error ? error.message : t("clientProfile.nutritionGenerationFailed"),
+      );
+    } finally {
+      setIsNutritionRefreshing(false);
+    }
+  }
 
   function submitProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -938,37 +983,136 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
         </div>
       </SectionCard>
 
-      {nutritionPlan ? (
-        <SectionCard title={t("plans.nutritionPlan")}>
-          <div className="grid gap-4 md:grid-cols-5">
-            <StatCard
-              label={t("clientProfile.nutritionCalories")}
-              value={String(nutritionPlan.calories)}
-              detail={t("clientProfile.nutritionPerDay")}
-            />
-            <StatCard
-              label={t("clientProfile.nutritionProtein")}
-              value={String(nutritionPlan.proteinGrams)}
-              detail={t("clientProfile.nutritionGrams")}
-            />
-            <StatCard
-              label={t("clientProfile.nutritionCarbs")}
-              value={String(nutritionPlan.carbsGrams)}
-              detail={t("clientProfile.nutritionGrams")}
-            />
-            <StatCard
-              label={t("clientProfile.nutritionFats")}
-              value={String(nutritionPlan.fatsGrams)}
-              detail={t("clientProfile.nutritionGrams")}
-            />
-            <StatCard
-              label={t("clientProfile.nutritionHydration")}
-              value={String(nutritionPlan.hydrationLiters)}
-              detail={t("clientProfile.nutritionLiters")}
-            />
+      <SectionCard
+        title={t("plans.nutritionPlan")}
+        subtitle={t("clientProfile.nutritionAutoSubtitle")}
+        aside={
+          <button
+            type="button"
+            onClick={() => void handleManualNutritionRefresh()}
+            disabled={isNutritionRefreshing}
+            className="rounded-full bg-[color:var(--clay)] px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(196,93,66,0.22)] transition disabled:cursor-wait disabled:opacity-70"
+          >
+            {isNutritionRefreshing
+              ? t("clientProfile.generatingNutrition")
+              : t("clientProfile.generateNutritionPlan")}
+          </button>
+        }
+      >
+        {nutritionError ? (
+          <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+            {nutritionError}
           </div>
-        </SectionCard>
-      ) : null}
+        ) : null}
+
+        {nutritionPlan ? (
+          <div className="space-y-5">
+            <div className="grid gap-4 lg:grid-cols-5">
+              <StatCard
+                label={t("clientProfile.nutritionCalories")}
+                value={String(nutritionPlan.calories)}
+                detail={t("clientProfile.nutritionPerDay")}
+              />
+              <StatCard
+                label={t("clientProfile.nutritionProtein")}
+                value={String(nutritionPlan.proteinGrams)}
+                detail={t("clientProfile.nutritionGrams")}
+              />
+              <StatCard
+                label={t("clientProfile.nutritionCarbs")}
+                value={String(nutritionPlan.carbsGrams)}
+                detail={t("clientProfile.nutritionGrams")}
+              />
+              <StatCard
+                label={t("clientProfile.nutritionFats")}
+                value={String(nutritionPlan.fatsGrams)}
+                detail={t("clientProfile.nutritionGrams")}
+              />
+              <StatCard
+                label={t("clientProfile.nutritionHydration")}
+                value={String(nutritionPlan.hydrationLiters)}
+                detail={t("clientProfile.nutritionLiters")}
+              />
+            </div>
+
+            <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+              <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.24em] text-[color:var(--muted-ink)]">
+                      {t("clientProfile.nutritionRecommendation")}
+                    </p>
+                    <h3 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">
+                      {nutritionPlan.title}
+                    </h3>
+                  </div>
+                  <span className="rounded-full bg-[color:var(--sand-2)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--ink)]">
+                    AI
+                  </span>
+                </div>
+
+                <p className="mt-4 text-sm leading-7 text-[color:var(--ink)]">
+                  {nutritionPlan.coachRecommendation}
+                </p>
+
+                <div className="mt-5">
+                  <p className="text-sm font-semibold text-[color:var(--ink)]">
+                    {t("clientProfile.nutritionPrinciples")}
+                  </p>
+                  <div className="mt-3 grid gap-3">
+                    {nutritionPlan.principles.map((principle) => (
+                      <div
+                        key={principle}
+                        className="rounded-2xl bg-[color:var(--sand-2)] px-4 py-3 text-sm leading-6 text-[color:var(--ink)]"
+                      >
+                        {principle}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-[color:var(--ink)]">
+                    {t("clientProfile.mealDistribution")}
+                  </p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--muted-ink)]">
+                    {formatDate(nutritionPlan.updatedAt, {
+                      day: "2-digit",
+                      month: "short",
+                    })}
+                  </p>
+                </div>
+
+                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                  {mealDistribution.map((meal) => (
+                    <div
+                      key={meal.key}
+                      className="rounded-[22px] border border-[color:var(--line-soft)] bg-[color:var(--sand-2)]/70 p-4"
+                    >
+                      <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--muted-ink)]">
+                        {meal.label}
+                      </p>
+                      <p className="mt-3 text-3xl font-semibold text-[color:var(--ink)]">
+                        {meal.share}%
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">
+                        ~{Math.round((nutritionPlan.calories * meal.share) / 100)} kcal
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <EmptyState
+            title={t("plans.nutritionPlan")}
+            body={t("clientProfile.noNutritionPlan")}
+          />
+        )}
+      </SectionCard>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import {
   BodyAssessment,
   ClientProfile,
   Locale,
+  NutritionPlan,
   PlannedWorkout,
   Session,
   SessionWorkout,
@@ -29,7 +30,29 @@ type AdaptivePlanInput = {
   kind: "workout" | "nutrition";
 };
 
+type NutritionPlanInput = {
+  locale: Locale;
+  client: ClientProfile;
+  currentNutritionPlan?: NutritionPlan | null;
+  recentAssessments: BodyAssessment[];
+  recentSessions: Session[];
+};
+
 type DraftFields = Pick<AIDraft, "title" | "subject" | "body" | "internalNote">;
+type GeneratedNutritionPlan = Pick<
+  NutritionPlan,
+  | "title"
+  | "calories"
+  | "proteinGrams"
+  | "carbsGrams"
+  | "fatsGrams"
+  | "hydrationLiters"
+  | "principles"
+  | "breakfastSharePercent"
+  | "lunchSharePercent"
+  | "dinnerSharePercent"
+  | "coachRecommendation"
+>;
 
 let cachedOpenAIClient: OpenAI | null | undefined;
 
@@ -141,6 +164,252 @@ function parseDraftFields(raw: string | null | undefined) {
   return null;
 }
 
+function parseNutritionPlanFields(raw: string | null | undefined) {
+  if (!raw) {
+    return null;
+  }
+
+  const cleaned = raw
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  const candidates = [cleaned];
+  const objectStart = cleaned.indexOf("{");
+  const objectEnd = cleaned.lastIndexOf("}");
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    candidates.push(cleaned.slice(objectStart, objectEnd + 1));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as Partial<GeneratedNutritionPlan>;
+      if (
+        typeof parsed.title !== "string" ||
+        typeof parsed.calories !== "number" ||
+        typeof parsed.proteinGrams !== "number" ||
+        typeof parsed.carbsGrams !== "number" ||
+        typeof parsed.fatsGrams !== "number" ||
+        typeof parsed.hydrationLiters !== "number" ||
+        !Array.isArray(parsed.principles) ||
+        typeof parsed.breakfastSharePercent !== "number" ||
+        typeof parsed.lunchSharePercent !== "number" ||
+        typeof parsed.dinnerSharePercent !== "number" ||
+        typeof parsed.coachRecommendation !== "string"
+      ) {
+        continue;
+      }
+
+      const principles = parsed.principles
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 4);
+
+      if (principles.length === 0) {
+        continue;
+      }
+
+      return {
+        title: parsed.title.trim(),
+        calories: Math.max(1200, Math.round(parsed.calories)),
+        proteinGrams: Math.max(80, Math.round(parsed.proteinGrams)),
+        carbsGrams: Math.max(80, Math.round(parsed.carbsGrams)),
+        fatsGrams: Math.max(35, Math.round(parsed.fatsGrams)),
+        hydrationLiters: Math.max(1.5, Math.round(parsed.hydrationLiters * 10) / 10),
+        principles,
+        breakfastSharePercent: Math.round(parsed.breakfastSharePercent),
+        lunchSharePercent: Math.round(parsed.lunchSharePercent),
+        dinnerSharePercent: Math.round(parsed.dinnerSharePercent),
+        coachRecommendation: parsed.coachRecommendation.trim(),
+      } satisfies GeneratedNutritionPlan;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function roundToNearest(value: number, step = 5) {
+  return Math.max(step, Math.round(value / step) * step);
+}
+
+function findMetricValue(
+  assessment: BodyAssessment | undefined,
+  patterns: RegExp[],
+) {
+  if (!assessment) {
+    return null;
+  }
+
+  const match = assessment.metrics.find((metric) =>
+    patterns.some((pattern) => pattern.test(metric.label)),
+  );
+  return match?.value ?? null;
+}
+
+function normalizeMealDistribution(
+  breakfast: number,
+  lunch: number,
+  dinner: number,
+) {
+  const total = breakfast + lunch + dinner;
+  if (!Number.isFinite(total) || total <= 0) {
+    return {
+      breakfastSharePercent: 30,
+      lunchSharePercent: 35,
+      dinnerSharePercent: 35,
+    };
+  }
+
+  const normalizedBreakfast = Math.max(15, Math.round((breakfast / total) * 100));
+  const normalizedLunch = Math.max(20, Math.round((lunch / total) * 100));
+  let normalizedDinner = 100 - normalizedBreakfast - normalizedLunch;
+
+  if (normalizedDinner < 20) {
+    normalizedDinner = 20;
+  }
+
+  const diff = 100 - (normalizedBreakfast + normalizedLunch + normalizedDinner);
+  return {
+    breakfastSharePercent: normalizedBreakfast,
+    lunchSharePercent: normalizedLunch + diff,
+    dinnerSharePercent: normalizedDinner,
+  };
+}
+
+function buildFallbackNutritionPlan(input: NutritionPlanInput): GeneratedNutritionPlan {
+  const { client, locale, recentAssessments, recentSessions } = input;
+  const latestAssessment = getLatestAssessment(recentAssessments);
+  const profileText = [
+    client.goals.join(" "),
+    client.tags.join(" "),
+    client.notes,
+    client.healthFlags.map((flag) => `${flag.title} ${flag.detail}`).join(" "),
+  ]
+    .join(" ")
+    .toLowerCase();
+  const weight = findMetricValue(latestAssessment, [/weight/i, /^kg$/i]);
+  const isFatLoss = /(fat loss|waist|reduction|lean|drop)/i.test(profileText);
+  const isMassGain = /(mass|gain|muscle|bulk|hypertrophy)/i.test(profileText);
+  const prefersPortableBreakfast = /(travel|portable breakfast|morning|commute)/i.test(profileText);
+  const lateDinnerPattern = /(evening|late|work late|after work)/i.test(profileText);
+  const weeklySessions = recentSessions.filter(
+    (session) => session.status === "planned" || session.status === "in-progress" || session.status === "completed",
+  ).length;
+
+  const calories = isMassGain
+    ? roundToNearest((weight ?? 80) * 37, 10)
+    : isFatLoss
+      ? roundToNearest((weight ?? 68) * 28, 10)
+      : roundToNearest((weight ?? 72) * 31, 10);
+  const proteinGrams = roundToNearest((weight ?? (isMassGain ? 82 : 70)) * 1.9, 5);
+  const fatsGrams = roundToNearest(
+    isMassGain
+      ? (weight ?? 80) * 1
+      : isFatLoss
+        ? (weight ?? 68) * 0.9
+        : (weight ?? 72) * 0.95,
+    1,
+  );
+  const carbsGrams = roundToNearest(
+    Math.max(120, (calories - proteinGrams * 4 - fatsGrams * 9) / 4),
+    5,
+  );
+  const hydrationLiters = Math.round((((weight ?? 70) * 0.035) + Math.min(0.6, weeklySessions * 0.1)) * 10) / 10;
+  const mealDistribution = normalizeMealDistribution(
+    prefersPortableBreakfast ? 26 : 30,
+    34,
+    lateDinnerPattern || isMassGain ? 40 : 36,
+  );
+
+  const principles =
+    locale === "et"
+      ? [
+          isMassGain
+            ? "Hoia lõuna ja õhtusöök süsivesikurikkad, et kogu päevane energia tuleks päriselt täis."
+            : isFatLoss
+              ? "Alusta päeva valgu ja kiudainetega, et õhtune isu oleks paremini kontrolli all."
+              : "Jaga valk ühtlaselt kolme põhitoidukorra peale, et taastumine püsiks stabiilne.",
+          prefersPortableBreakfast
+            ? "Valmista ette lihtne kaasavõetav hommikusöök, mida on lihtne hoida ka kiirel või reisipäeval."
+            : "Hoia hommikusöök korduv ja lihtne, et päev algaks ilma otsustusväsimuseta.",
+          client.healthFlags.length > 0
+            ? `Arvesta tervisefookusega: ${client.healthFlags[0]?.detail ?? client.healthFlags[0]?.title}.`
+            : "Jäta nädalasse üks paindlik toidukord, et plaan püsiks ka reaalses elus.",
+          latestAssessment?.notes
+            ? `Viimase kehaanalüüsi fookus: ${latestAssessment.notes}`
+            : "Vaata energiataset ja treeningujärgset taastumist üle iga nädala lõpus.",
+        ]
+      : [
+          isMassGain
+            ? "Keep lunch and dinner carb-forward so total daily energy is actually achieved."
+            : isFatLoss
+              ? "Anchor the day with protein and fiber so evening hunger stays easier to manage."
+              : "Distribute protein evenly across the three main meals to keep recovery steady.",
+          prefersPortableBreakfast
+            ? "Use a portable breakfast option that still works on rushed or travel-heavy days."
+            : "Keep breakfast repeatable and low-friction so the day starts without decision fatigue.",
+          client.healthFlags.length > 0
+            ? `Adjust food structure to support the current health flag: ${client.healthFlags[0]?.detail ?? client.healthFlags[0]?.title}.`
+            : "Leave one flexible meal in the week so the plan stays realistic.",
+          latestAssessment?.notes
+            ? `Latest body-composition context: ${latestAssessment.notes}`
+            : "Review energy and post-session recovery weekly and adjust from that trend.",
+        ];
+
+  const coachRecommendation =
+    locale === "et"
+      ? [
+          latestAssessment?.notes
+            ? `Viimane kehaanalüüs ütleb: ${latestAssessment.notes}`
+            : "Kasuta järgmise kahe nädala jooksul energiataset ja treeningujärgset taastumist peamise kontrollpunktina.",
+          isFatLoss
+            ? "Praegune fookus on mõõdukas defitsiit ilma valgu või treeningutaluvuse arvelt järele andmata."
+            : isMassGain
+              ? "Praegune fookus on järjepidev energiaküllus, eriti päeva teises pooles ja pärast trenni."
+              : "Praegune fookus on stabiilne taastumine, valgujaotus ja lihtne igapäevane rütm.",
+        ].join(" ")
+      : [
+          latestAssessment?.notes
+            ? `Latest body assessment note: ${latestAssessment.notes}`
+            : "Use energy levels and post-session recovery as the main checkpoint over the next two weeks.",
+          isFatLoss
+            ? "The current target is a moderate deficit without sacrificing protein intake or training tolerance."
+            : isMassGain
+              ? "The current target is consistent energy surplus, especially later in the day and after training."
+              : "The current target is steady recovery, even protein distribution, and a low-friction daily rhythm.",
+        ].join(" ");
+
+  return {
+    title:
+      locale === "et"
+        ? isMassGain
+          ? "Massifaasi toitumisstruktuur"
+          : isFatLoss
+            ? "Rasvakaotust toetav toitumisstruktuur"
+            : "Taastumist toetav toitumisstruktuur"
+        : isMassGain
+          ? "Mass-support nutrition structure"
+          : isFatLoss
+            ? "Fat-loss support nutrition structure"
+            : "Recovery-support nutrition structure",
+    calories,
+    proteinGrams,
+    carbsGrams,
+    fatsGrams,
+    hydrationLiters,
+    principles: principles.slice(0, 4),
+    breakfastSharePercent: mealDistribution.breakfastSharePercent,
+    lunchSharePercent: mealDistribution.lunchSharePercent,
+    dinnerSharePercent: mealDistribution.dinnerSharePercent,
+    coachRecommendation,
+  };
+}
+
 async function enhanceDraftWithOpenAI(
   fallback: AIDraft,
   taskInstruction: string,
@@ -173,6 +442,52 @@ async function enhanceDraftWithOpenAI(
     ...parsed,
     model,
     updatedAt: nowIso(),
+  };
+}
+
+async function enhanceNutritionPlanWithOpenAI(
+  fallback: GeneratedNutritionPlan,
+  input: NutritionPlanInput,
+) {
+  const client = getOpenAIClient();
+  const model = getOpenAIModel();
+
+  if (!client || !model) {
+    return fallback;
+  }
+
+  const systemPrompt =
+    "You create structured nutrition guidance for a coaching CRM. Return valid JSON only with keys title, calories, proteinGrams, carbsGrams, fatsGrams, hydrationLiters, principles, breakfastSharePercent, lunchSharePercent, dinnerSharePercent, coachRecommendation. Use concise values, 3-4 principles, and make breakfast/lunch/dinner percentages sum to 100. Do not use markdown or code fences. Do not invent measurements missing from the context.";
+
+  const response = await client.responses.create({
+    model,
+    input: `${systemPrompt}\n\nTask:\n${
+      input.locale === "et"
+        ? "Koosta coach-facing toitumiskava soovitus, mis arvestab kliendi profiili, eesmärke, tervisefookusi, märkmeid, viimast kehaanalüüsi ja hiljutist treeningkoormust."
+        : "Create a coach-facing nutrition recommendation that reflects the client profile, goals, health flags, notes, latest body assessment, and recent training load."
+    }\n\nContext JSON:\n${safeJsonStringify({
+      locale: input.locale,
+      client: input.client,
+      currentNutritionPlan: input.currentNutritionPlan,
+      recentAssessments: input.recentAssessments.slice(0, 4),
+      recentSessions: input.recentSessions.slice(0, 6),
+    })}`,
+  });
+
+  const parsed = parseNutritionPlanFields(response.output_text);
+  if (!parsed) {
+    return fallback;
+  }
+
+  const mealDistribution = normalizeMealDistribution(
+    parsed.breakfastSharePercent,
+    parsed.lunchSharePercent,
+    parsed.dinnerSharePercent,
+  );
+
+  return {
+    ...parsed,
+    ...mealDistribution,
   };
 }
 
@@ -469,6 +784,17 @@ export async function buildAdaptivePlanDraft(input: AdaptivePlanInput) {
     );
   } catch (error) {
     console.error("OpenAI adaptive plan generation failed.", error);
+    return fallback;
+  }
+}
+
+export async function buildNutritionPlanRecommendation(input: NutritionPlanInput) {
+  const fallback = buildFallbackNutritionPlan(input);
+
+  try {
+    return await enhanceNutritionPlanWithOpenAI(fallback, input);
+  } catch (error) {
+    console.error("OpenAI nutrition plan generation failed.", error);
     return fallback;
   }
 }

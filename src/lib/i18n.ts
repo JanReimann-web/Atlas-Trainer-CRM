@@ -214,6 +214,20 @@ const messages: Record<Locale, DictionaryTree> = {
       healthFlags: "Health flags",
       latestAssessment: "Latest assessment",
       openActiveSession: "Open session",
+      generateNutritionPlan: "Generate AI nutrition plan",
+      generatingNutrition: "Updating nutrition plan...",
+      nutritionAutoSubtitle:
+        "AI refreshes this plan after client profile or body-assessment changes. The coach can also trigger it manually.",
+      nutritionRecommendation: "AI recommendation",
+      nutritionPrinciples: "Key structure",
+      mealDistribution: "Breakfast / lunch / dinner split",
+      breakfast: "Breakfast",
+      lunch: "Lunch",
+      dinner: "Dinner",
+      noNutritionPlan:
+        "No nutrition plan has been generated yet. Use the AI button to create a coach-facing structure from the profile and latest body assessment.",
+      nutritionGenerationFailed:
+        "The nutrition plan could not be refreshed right now. Please try again.",
       noSession: "No upcoming session scheduled yet.",
       missingTitle: "Client not found",
       missingBody: "The requested client profile does not exist in the current CRM state.",
@@ -573,6 +587,20 @@ const messages: Record<Locale, DictionaryTree> = {
       healthFlags: "Tervisefookused",
       latestAssessment: "Viimane kehaanalüüs",
       openActiveSession: "Ava treening",
+      generateNutritionPlan: "Genereeri AI toitumiskava",
+      generatingNutrition: "Uuendan toitumiskava...",
+      nutritionAutoSubtitle:
+        "AI värskendab seda kava pärast kliendiprofiili või kehaanalüüsi muutmist. Treener saab selle ka käsitsi käivitada.",
+      nutritionRecommendation: "AI soovitus",
+      nutritionPrinciples: "Põhistruktuur",
+      mealDistribution: "Hommiku-, lõuna- ja õhtusöögi jaotus",
+      breakfast: "Hommikusöök",
+      lunch: "Lõunasöök",
+      dinner: "Õhtusöök",
+      noNutritionPlan:
+        "Toitumiskava pole veel genereeritud. Kasuta AI nuppu, et luua profiili ja viimase kehaanalüüsi põhjal treenerile uus struktuur.",
+      nutritionGenerationFailed:
+        "Toitumiskava ei õnnestunud praegu värskendada. Proovi palun uuesti.",
       noSession: "Järgmine treening pole veel kalendrisse pandud.",
       missingTitle: "Klienti ei leitud",
       missingBody: "Soovitud kliendiprofiili ei ole praeguses CRM-i seisus olemas.",
