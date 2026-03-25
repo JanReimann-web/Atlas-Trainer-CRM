@@ -64,6 +64,7 @@ type CRMContextValue = {
   createLead: (input: CreateLeadInput) => void;
   createClient: (input: CreateClientInput) => void;
   createClientFromLead: (leadId: string, input: CreateClientInput) => void;
+  updateClient: (clientId: string, input: CreateClientInput) => void;
   addPackagePurchase: (input: CreatePackagePurchaseInput) => void;
   addBodyAssessment: (input: CreateBodyAssessmentInput) => void;
   convertLeadToClient: (leadId: string) => void;
@@ -138,6 +139,7 @@ function buildClientProfileFromLead(
 ): ClientProfile {
   return {
     id: `client-${crypto.randomUUID()}`,
+    originLeadId: "id" in lead ? lead.id : undefined,
     fullName: lead.fullName,
     email: lead.email,
     phone: lead.phone,
@@ -530,6 +532,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
         const client: ClientProfile = {
           id: `client-${crypto.randomUUID()}`,
+          originLeadId: leadId,
           ...input,
           joinedAt: timestamp(),
           ownerId: previous.users[0]?.id ?? "user-maria",
@@ -563,6 +566,62 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
               clientId: client.id,
               type: "lead.converted",
               detail: `Converted ${lead.fullName} into an active client profile.`,
+              createdAt: now,
+            },
+            ...previous.activityEvents,
+          ],
+        };
+      }),
+    updateClient: (clientId, input) =>
+      applyCRMUpdate((previous) => {
+        const existingClient = previous.clients.find((client) => client.id === clientId);
+        if (!existingClient) {
+          return previous;
+        }
+
+        const now = timestamp();
+        const relatedLead = previous.leads.find(
+          (lead) =>
+            lead.id === existingClient.originLeadId ||
+            (!existingClient.originLeadId &&
+              lead.status === "converted" &&
+              lead.email.toLowerCase() === existingClient.email.toLowerCase()),
+        );
+
+        return {
+          ...previous,
+          clients: previous.clients.map((client) =>
+            client.id === clientId
+              ? {
+                  ...client,
+                  ...input,
+                }
+              : client,
+          ),
+          leads: relatedLead
+            ? previous.leads.map((lead) =>
+                lead.id === relatedLead.id
+                  ? {
+                      ...lead,
+                      fullName: input.fullName,
+                      email: input.email,
+                      phone: input.phone,
+                      preferredLanguage: input.preferredLanguage,
+                      goal: input.goals.join(", "),
+                      notes: input.notes,
+                      status: "converted",
+                      lastContactAt: now,
+                    }
+                  : lead,
+              )
+            : previous.leads,
+          activityEvents: [
+            {
+              id: `act-${crypto.randomUUID()}`,
+              actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
+              clientId,
+              type: "client.updated",
+              detail: `Updated client profile for ${input.fullName}.`,
               createdAt: now,
             },
             ...previous.activityEvents,

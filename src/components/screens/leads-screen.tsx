@@ -20,6 +20,8 @@ const defaultLeadForm: CreateLeadInput = {
   notes: "",
 };
 
+const visibleLeadStatuses = ["new", "contacted", "trial-booked"] as const;
+
 export function LeadsScreen() {
   const { state, createLead, updateLeadStatus } = useCRM();
   const { t, formatDate } = useLocaleContext();
@@ -28,16 +30,20 @@ export function LeadsScreen() {
   const [form, setForm] = useState<CreateLeadInput>(defaultLeadForm);
   const [formError, setFormError] = useState<string | null>(null);
   const deferredQuery = useDeferredValue(query);
+  const activeLeads = useMemo(
+    () => state.leads.filter((lead) => lead.status !== "converted"),
+    [state.leads],
+  );
   const counts = getLeadCounts(state);
 
   const filtered = useMemo(
     () =>
-      state.leads.filter((lead) =>
+      activeLeads.filter((lead) =>
         `${lead.fullName} ${lead.goal} ${lead.source}`
           .toLowerCase()
           .includes(deferredQuery.toLowerCase()),
       ),
-    [deferredQuery, state.leads],
+    [activeLeads, deferredQuery],
   );
 
   function updateField<Key extends keyof CreateLeadInput>(key: Key, value: CreateLeadInput[Key]) {
@@ -80,8 +86,8 @@ export function LeadsScreen() {
     <div className="space-y-6">
       <PageLead eyebrow={t("nav.leads")} title={t("leads.title")} subtitle={t("leads.subtitle")} />
 
-      <div className="grid gap-4 md:grid-cols-4">
-        {["new", "contacted", "trial-booked", "converted"].map((status) => (
+      <div className="grid gap-4 md:grid-cols-3">
+        {visibleLeadStatuses.map((status) => (
           <StatCard
             key={status}
             label={t(`status.${status}`)}
@@ -140,7 +146,7 @@ export function LeadsScreen() {
                   onChange={(event) => updateField("status", event.target.value as CreateLeadInput["status"])}
                   className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/85 px-4 py-3 text-sm outline-none"
                 >
-                  {(["new", "contacted", "trial-booked"] as const).map((status) => (
+                  {visibleLeadStatuses.map((status) => (
                     <option key={status} value={status}>
                       {t(`status.${status}`)}
                     </option>
@@ -252,14 +258,14 @@ export function LeadsScreen() {
                     <p>{formatDate(lead.lastContactAt)}</p>
                   </div>
                   <div className="mt-5 flex flex-wrap gap-3">
-                    <select
+                  <select
                       value={lead.status}
                       onChange={(event) =>
                         updateLeadStatus(lead.id, event.target.value as CreateLeadInput["status"])
                       }
                       className="rounded-full border border-[color:var(--line-soft)] bg-white/90 px-4 py-2 text-sm text-[color:var(--ink)] outline-none"
                     >
-                      {(["new", "contacted", "trial-booked"] as const).map((status) => (
+                      {visibleLeadStatuses.map((status) => (
                         <option key={status} value={status}>
                           {t(`status.${status}`)}
                         </option>

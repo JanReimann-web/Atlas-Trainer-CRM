@@ -70,6 +70,7 @@ export interface HealthFlag {
 
 export interface ClientProfile {
   id: string;
+  originLeadId?: string;
   fullName: string;
   email: string;
   phone: string;

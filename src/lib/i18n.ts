@@ -31,6 +31,7 @@ const messages: Record<Locale, DictionaryTree> = {
     common: {
       search: "Search",
       save: "Save",
+      cancel: "Cancel",
       sent: "Sent",
       draft: "Draft",
       generate: "Generate",
@@ -205,6 +206,10 @@ const messages: Record<Locale, DictionaryTree> = {
       workouts: "Workout plans and sessions",
       communication: "Communication history",
       drafts: "Recent AI drafts",
+      profileDetails: "Profile details",
+      editProfile: "Edit profile",
+      editProfileSubtitle:
+        "Update contact details, goals, tags, consent state, and coaching notes whenever the client profile changes.",
       healthFlags: "Health flags",
       latestAssessment: "Latest assessment",
       openActiveSession: "Open active workout view",
@@ -386,6 +391,7 @@ const messages: Record<Locale, DictionaryTree> = {
     common: {
       search: "Otsi",
       save: "Salvesta",
+      cancel: "Tühista",
       sent: "Saadetud",
       draft: "Mustand",
       generate: "Genereeri",
@@ -558,6 +564,10 @@ const messages: Record<Locale, DictionaryTree> = {
       workouts: "Treeningkavad ja sessioonid",
       communication: "Suhtlusajalugu",
       drafts: "Hiljutised AI-mustandid",
+      profileDetails: "Profiili andmed",
+      editProfile: "Muuda profiili",
+      editProfileSubtitle:
+        "Uuenda kontaktandmeid, eesmärke, silte, nõusoleku staatust ja treeneri märkmeid alati, kui kliendi profiil muutub.",
       healthFlags: "Tervisefookused",
       latestAssessment: "Viimane kehaanalüüs",
       openActiveSession: "Ava aktiivne treeningvaade",

@@ -6,6 +6,10 @@ export function getClient(state: CRMState, clientId: string) {
 
 export function getLeadCounts(state: CRMState) {
   return state.leads.reduce<Record<string, number>>((acc, lead) => {
+    if (lead.status === "converted") {
+      return acc;
+    }
+
     acc[lead.status] = (acc[lead.status] ?? 0) + 1;
     return acc;
   }, {});
