@@ -25,6 +25,10 @@ import {
   AIDraft,
   CRMState,
   ClientProfile,
+  CreateBodyAssessmentInput,
+  CreateClientInput,
+  CreateLeadInput,
+  CreatePackagePurchaseInput,
   Locale,
   SessionExercise,
   SessionWorkout,
@@ -57,6 +61,10 @@ type CRMContextValue = {
   loading: boolean;
   error: string | null;
   persistenceMode: "local" | "firebase";
+  createLead: (input: CreateLeadInput) => void;
+  createClient: (input: CreateClientInput) => void;
+  addPackagePurchase: (input: CreatePackagePurchaseInput) => void;
+  addBodyAssessment: (input: CreateBodyAssessmentInput) => void;
   convertLeadToClient: (leadId: string) => void;
   markReminderDone: (reminderId: string) => void;
   updateSessionNote: (
@@ -102,6 +110,46 @@ function loadInitialState(firebaseConfigured: boolean): CRMState {
 
 function timestamp() {
   return new Date().toISOString();
+}
+
+function addDays(value: string, days: number) {
+  const date = new Date(value);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString();
+}
+
+function randomHue() {
+  return Math.floor(Math.random() * 360);
+}
+
+function clampAmount(value: number, max: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.min(max, Math.max(0, Math.round(value * 100) / 100));
+}
+
+function buildClientProfileFromLead(
+  lead: CreateLeadInput | CRMState["leads"][number],
+  ownerId: string,
+): ClientProfile {
+  return {
+    id: `client-${crypto.randomUUID()}`,
+    fullName: lead.fullName,
+    email: lead.email,
+    phone: lead.phone,
+    gender: "unspecified",
+    preferredLanguage: lead.preferredLanguage,
+    goals: [lead.goal].filter(Boolean),
+    tags: ["new-client"],
+    joinedAt: timestamp(),
+    consentStatus: "pending",
+    healthFlags: [],
+    notes: lead.notes,
+    ownerId,
+    avatarHue: randomHue(),
+  };
 }
 
 function createNewSet(label: string) {
@@ -399,6 +447,192 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     loading: authLoading || crmLoading,
     error: crmError,
     persistenceMode: firebaseConfigured ? "firebase" : "local",
+    createLead: (input) =>
+      applyCRMUpdate((previous) => {
+        if (
+          previous.leads.some((lead) => lead.email.toLowerCase() === input.email.toLowerCase()) ||
+          previous.clients.some((client) => client.email.toLowerCase() === input.email.toLowerCase())
+        ) {
+          return previous;
+        }
+
+        const now = timestamp();
+        const lead = {
+          id: `lead-${crypto.randomUUID()}`,
+          ...input,
+          createdAt: now,
+          lastContactAt: now,
+        };
+
+        return {
+          ...previous,
+          leads: [lead, ...previous.leads],
+          activityEvents: [
+            {
+              id: `act-${crypto.randomUUID()}`,
+              actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
+              type: "lead.created",
+              detail: `Added ${lead.fullName} to the lead pipeline.`,
+              createdAt: now,
+            },
+            ...previous.activityEvents,
+          ],
+        };
+      }),
+    createClient: (input) =>
+      applyCRMUpdate((previous) => {
+        if (previous.clients.some((client) => client.email.toLowerCase() === input.email.toLowerCase())) {
+          return previous;
+        }
+
+        const client: ClientProfile = {
+          id: `client-${crypto.randomUUID()}`,
+          ...input,
+          joinedAt: timestamp(),
+          ownerId: previous.users[0]?.id ?? "user-maria",
+          avatarHue: randomHue(),
+        };
+
+        return {
+          ...previous,
+          clients: [client, ...previous.clients],
+          activityEvents: [
+            {
+              id: `act-${crypto.randomUUID()}`,
+              actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
+              clientId: client.id,
+              type: "client.created",
+              detail: `Created client profile for ${client.fullName}.`,
+              createdAt: timestamp(),
+            },
+            ...previous.activityEvents,
+          ],
+        };
+      }),
+    addPackagePurchase: (input) =>
+      applyCRMUpdate((previous) => {
+        const template = previous.packageTemplates.find((item) => item.id === input.templateId);
+        if (!template) {
+          return previous;
+        }
+
+        const invoiceId = `inv-${crypto.randomUUID()}`;
+        const purchaseId = `pkg-${crypto.randomUUID()}`;
+        const paidAmount =
+          input.paymentStatus === "paid"
+            ? template.price
+            : clampAmount(input.amountPaid, template.price);
+        const paymentStatus =
+          paidAmount >= template.price
+            ? "paid"
+            : paidAmount > 0
+              ? input.paymentStatus === "overdue"
+                ? "overdue"
+                : "partial"
+              : input.paymentStatus;
+        const now = timestamp();
+
+        return {
+          ...previous,
+          packagePurchases: [
+            {
+              id: purchaseId,
+              clientId: input.clientId,
+              templateId: input.templateId,
+              purchasedAt: input.purchasedAt,
+              startsAt: input.startsAt,
+              expiresAt: input.expiresAt,
+              totalUnits: template.sessionCount,
+              usedUnits: 0,
+              price: template.price,
+              paymentStatus,
+              invoiceId,
+              notes: input.notes?.trim() ? input.notes.trim() : undefined,
+            },
+            ...previous.packagePurchases,
+          ],
+          invoiceRecords: [
+            {
+              id: invoiceId,
+              clientId: input.clientId,
+              packagePurchaseId: purchaseId,
+              issuedAt: input.purchasedAt,
+              dueAt: addDays(input.purchasedAt, 3),
+              amount: template.price,
+              currency: template.currency,
+              paymentStatus,
+            },
+            ...previous.invoiceRecords,
+          ],
+          paymentRecords:
+            paidAmount > 0
+              ? [
+                  {
+                    id: `pay-${crypto.randomUUID()}`,
+                    clientId: input.clientId,
+                    invoiceId,
+                    paidAt: input.purchasedAt,
+                    amount: paidAmount,
+                    currency: template.currency,
+                    method: "manual entry",
+                  },
+                  ...previous.paymentRecords,
+                ]
+              : previous.paymentRecords,
+          activityEvents: [
+            {
+              id: `act-${crypto.randomUUID()}`,
+              actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
+              clientId: input.clientId,
+              type: "package.created",
+              detail: `Added ${template.name} package purchase.`,
+              createdAt: now,
+            },
+            ...previous.activityEvents,
+          ],
+        };
+      }),
+    addBodyAssessment: (input) =>
+      applyCRMUpdate((previous) => {
+        const metrics = input.metrics
+          .filter((metric) => metric.label.trim() && metric.unit.trim())
+          .map((metric) => ({
+            id: `metric-${crypto.randomUUID()}`,
+            label: metric.label.trim(),
+            unit: metric.unit.trim(),
+            value: metric.value,
+          }));
+
+        if (metrics.length === 0) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          bodyAssessments: [
+            {
+              id: `ba-${crypto.randomUUID()}`,
+              clientId: input.clientId,
+              recordedAt: input.recordedAt,
+              recordedBy: previous.users[0]?.id ?? "user-maria",
+              notes: input.notes,
+              metrics,
+            },
+            ...previous.bodyAssessments,
+          ],
+          activityEvents: [
+            {
+              id: `act-${crypto.randomUUID()}`,
+              actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
+              clientId: input.clientId,
+              type: "assessment.created",
+              detail: `Recorded a new body assessment entry.`,
+              createdAt: timestamp(),
+            },
+            ...previous.activityEvents,
+          ],
+        };
+      }),
     convertLeadToClient: (leadId) =>
       applyCRMUpdate((previous) => {
         const lead = previous.leads.find((item) => item.id === leadId);
@@ -406,21 +640,9 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           return previous;
         }
 
-        const client: ClientProfile = {
+        const client = {
+          ...buildClientProfileFromLead(lead, previous.users[0]?.id ?? "user-maria"),
           id: `client-${lead.id.replace("lead-", "")}`,
-          fullName: lead.fullName,
-          email: lead.email,
-          phone: lead.phone,
-          gender: "unspecified",
-          preferredLanguage: lead.preferredLanguage,
-          goals: [lead.goal],
-          tags: ["new-client"],
-          joinedAt: timestamp(),
-          consentStatus: "pending",
-          healthFlags: [],
-          notes: lead.notes,
-          ownerId: previous.users[0]?.id ?? "user-maria",
-          avatarHue: 42,
         };
 
         return {

@@ -50,6 +50,18 @@ export interface Lead {
   notes: string;
 }
 
+export interface CreateLeadInput {
+  fullName: string;
+  email: string;
+  phone: string;
+  source: string;
+  status: LeadStatus;
+  goal: string;
+  nextStep: string;
+  preferredLanguage: Locale;
+  notes: string;
+}
+
 export interface HealthFlag {
   title: string;
   detail: string;
@@ -71,6 +83,19 @@ export interface ClientProfile {
   notes: string;
   ownerId: string;
   avatarHue: number;
+}
+
+export interface CreateClientInput {
+  fullName: string;
+  email: string;
+  phone: string;
+  gender: string;
+  preferredLanguage: Locale;
+  goals: string[];
+  tags: string[];
+  consentStatus: ConsentState;
+  notes: string;
+  healthFlags: HealthFlag[];
 }
 
 export interface PackageTemplate {
@@ -96,6 +121,17 @@ export interface PackagePurchase {
   price: number;
   paymentStatus: PaymentStatus;
   invoiceId: string;
+  notes?: string;
+}
+
+export interface CreatePackagePurchaseInput {
+  clientId: string;
+  templateId: string;
+  purchasedAt: string;
+  startsAt: string;
+  expiresAt: string;
+  paymentStatus: PaymentStatus;
+  amountPaid: number;
   notes?: string;
 }
 
@@ -189,6 +225,12 @@ export interface BodyMetric {
   value: number;
 }
 
+export interface BodyMetricInput {
+  label: string;
+  unit: string;
+  value: number;
+}
+
 export interface BodyAssessment {
   id: string;
   clientId: string;
@@ -196,6 +238,13 @@ export interface BodyAssessment {
   recordedBy: string;
   notes: string;
   metrics: BodyMetric[];
+}
+
+export interface CreateBodyAssessmentInput {
+  clientId: string;
+  recordedAt: string;
+  notes: string;
+  metrics: BodyMetricInput[];
 }
 
 export interface WorkoutPlan {
