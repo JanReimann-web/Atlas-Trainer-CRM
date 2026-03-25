@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useDeferredValue, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useCRM, useLocaleContext } from "@/components/app-providers";
 import { DataLabel, EmptyState, SectionCard, StatCard, StatusBadge } from "@/components/crm-ui";
 import { getLeadCounts } from "@/lib/selectors";
@@ -20,8 +21,9 @@ const defaultLeadForm: CreateLeadInput = {
 };
 
 export function LeadsScreen() {
-  const { state, createLead, convertLeadToClient } = useCRM();
+  const { state, createLead, updateLeadStatus } = useCRM();
   const { t, formatDate } = useLocaleContext();
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [form, setForm] = useState<CreateLeadInput>(defaultLeadForm);
   const [formError, setFormError] = useState<string | null>(null);
@@ -248,9 +250,34 @@ export function LeadsScreen() {
                     <p>{formatDate(lead.lastContactAt)}</p>
                   </div>
                   <div className="mt-5 flex flex-wrap gap-3">
+                    <select
+                      value={lead.status}
+                      onChange={(event) =>
+                        updateLeadStatus(lead.id, event.target.value as CreateLeadInput["status"])
+                      }
+                      className="rounded-full border border-[color:var(--line-soft)] bg-white/90 px-4 py-2 text-sm text-[color:var(--ink)] outline-none"
+                    >
+                      {(["new", "contacted", "trial-booked"] as const).map((status) => (
+                        <option key={status} value={status}>
+                          {t(`status.${status}`)}
+                        </option>
+                      ))}
+                    </select>
                     <button
                       type="button"
-                      onClick={() => convertLeadToClient(lead.id)}
+                      onClick={() => {
+                        const params = new URLSearchParams({
+                          fromLead: lead.id,
+                          fullName: lead.fullName,
+                          email: lead.email,
+                          phone: lead.phone,
+                          preferredLanguage: lead.preferredLanguage,
+                          goal: lead.goal,
+                          tagsText: "new-client",
+                          notes: lead.notes,
+                        });
+                        router.push(`/clients?${params.toString()}`);
+                      }}
                       disabled={lead.status === "converted"}
                       className="rounded-full bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-300"
                     >
