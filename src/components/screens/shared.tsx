@@ -9,7 +9,7 @@ export function PageLead({
 }: {
   eyebrow: string;
   title: string;
-  subtitle: string;
+  subtitle?: string;
 }) {
   return (
     <div className="space-y-2">
@@ -19,7 +19,9 @@ export function PageLead({
       <h1 className="font-display text-5xl leading-none text-[color:var(--ink)]">
         {title}
       </h1>
-      <p className="max-w-3xl text-sm leading-7 text-[color:var(--muted-ink)]">{subtitle}</p>
+      {subtitle ? (
+        <p className="max-w-3xl text-sm leading-7 text-[color:var(--muted-ink)]">{subtitle}</p>
+      ) : null}
     </div>
   );
 }

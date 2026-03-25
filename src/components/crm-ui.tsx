@@ -201,7 +201,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-[color:var(--background)] text-[color:var(--ink)]">
-      <div className="mx-auto grid min-h-screen max-w-[1600px] grid-cols-1 gap-6 px-4 py-4 lg:grid-cols-[280px_minmax(0,1fr)] lg:px-6">
+      <div className="mx-auto grid max-w-[1600px] grid-cols-1 gap-6 px-4 py-4 lg:grid-cols-[280px_minmax(0,1fr)] lg:px-6">
         <aside className="panel-surface hidden rounded-[36px] p-5 lg:flex lg:flex-col">
           <div className="space-y-8">
             <div className="rounded-[28px] bg-[color:var(--sand-2)] p-5">
