@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { FormEvent, useDeferredValue, useMemo, useState } from "react";
 import { useCRM, useLocaleContext } from "@/components/app-providers";
 import { DataLabel, EmptyState, SectionCard, StatusBadge } from "@/components/crm-ui";
@@ -50,10 +51,22 @@ function parseHealthFlags(value: string): HealthFlag[] {
 }
 
 export function ClientsScreen() {
-  const { state, createClient } = useCRM();
+  const { state, createClient, createClientFromLead } = useCRM();
   const { t, formatDate } = useLocaleContext();
+  const searchParams = useSearchParams();
+  const fromLeadId = searchParams.get("fromLead");
   const [query, setQuery] = useState("");
-  const [form, setForm] = useState(defaultClientForm);
+  const [form, setForm] = useState(() => ({
+    ...defaultClientForm,
+    fullName: searchParams.get("fullName") ?? "",
+    email: searchParams.get("email") ?? "",
+    phone: searchParams.get("phone") ?? "",
+    preferredLanguage:
+      searchParams.get("preferredLanguage") === "et" ? "et" : defaultClientForm.preferredLanguage,
+    goalsText: searchParams.get("goal") ?? "",
+    tagsText: searchParams.get("tagsText") ?? "",
+    notes: searchParams.get("notes") ?? "",
+  }));
   const [formError, setFormError] = useState<string | null>(null);
   const deferredQuery = useDeferredValue(query);
 
@@ -84,9 +97,18 @@ export function ClientsScreen() {
     }
 
     const email = form.email.trim().toLowerCase();
+    const fromLead = fromLeadId ? state.leads.find((lead) => lead.id === fromLeadId) : null;
+    if (state.clients.some((client) => client.email.toLowerCase() === email)) {
+      setFormError(t("forms.duplicateEmail"));
+      return;
+    }
+
     if (
-      state.clients.some((client) => client.email.toLowerCase() === email) ||
-      state.leads.some((lead) => lead.email.toLowerCase() === email)
+      state.leads.some(
+        (lead) =>
+          lead.email.toLowerCase() === email &&
+          (!fromLead || lead.id !== fromLead.id),
+      )
     ) {
       setFormError(t("forms.duplicateEmail"));
       return;
@@ -105,7 +127,11 @@ export function ClientsScreen() {
       healthFlags: parseHealthFlags(form.healthFlagsText),
     };
 
-    createClient(input);
+    if (fromLead) {
+      createClientFromLead(fromLead.id, input);
+    } else {
+      createClient(input);
+    }
     setForm(defaultClientForm);
   }
 

@@ -63,9 +63,11 @@ type CRMContextValue = {
   persistenceMode: "local" | "firebase";
   createLead: (input: CreateLeadInput) => void;
   createClient: (input: CreateClientInput) => void;
+  createClientFromLead: (leadId: string, input: CreateClientInput) => void;
   addPackagePurchase: (input: CreatePackagePurchaseInput) => void;
   addBodyAssessment: (input: CreateBodyAssessmentInput) => void;
   convertLeadToClient: (leadId: string) => void;
+  updateLeadStatus: (leadId: string, status: CreateLeadInput["status"]) => void;
   markReminderDone: (reminderId: string) => void;
   updateSessionNote: (
     sessionId: string,
@@ -509,6 +511,64 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           ],
         };
       }),
+    createClientFromLead: (leadId, input) =>
+      applyCRMUpdate((previous) => {
+        const lead = previous.leads.find((item) => item.id === leadId);
+        if (!lead) {
+          return previous;
+        }
+
+        if (
+          previous.clients.some(
+            (client) =>
+              client.email.toLowerCase() === input.email.toLowerCase() &&
+              client.email.toLowerCase() !== lead.email.toLowerCase(),
+          )
+        ) {
+          return previous;
+        }
+
+        const client: ClientProfile = {
+          id: `client-${crypto.randomUUID()}`,
+          ...input,
+          joinedAt: timestamp(),
+          ownerId: previous.users[0]?.id ?? "user-maria",
+          avatarHue: randomHue(),
+        };
+
+        const now = timestamp();
+
+        return {
+          ...previous,
+          leads: previous.leads.map((item) =>
+            item.id === leadId
+              ? {
+                  ...item,
+                  status: "converted",
+                  fullName: input.fullName,
+                  email: input.email,
+                  phone: input.phone,
+                  preferredLanguage: input.preferredLanguage,
+                  goal: input.goals.join(", "),
+                  notes: input.notes,
+                  lastContactAt: now,
+                }
+              : item,
+          ),
+          clients: [client, ...previous.clients],
+          activityEvents: [
+            {
+              id: `act-${crypto.randomUUID()}`,
+              actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
+              clientId: client.id,
+              type: "lead.converted",
+              detail: `Converted ${lead.fullName} into an active client profile.`,
+              createdAt: now,
+            },
+            ...previous.activityEvents,
+          ],
+        };
+      }),
     addPackagePurchase: (input) =>
       applyCRMUpdate((previous) => {
         const template = previous.packageTemplates.find((item) => item.id === input.templateId);
@@ -664,6 +724,19 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           ],
         };
       }),
+    updateLeadStatus: (leadId, status) =>
+      applyCRMUpdate((previous) => ({
+        ...previous,
+        leads: previous.leads.map((lead) =>
+          lead.id === leadId
+            ? {
+                ...lead,
+                status,
+                lastContactAt: timestamp(),
+              }
+            : lead,
+        ),
+      })),
     markReminderDone: (reminderId) =>
       applyCRMUpdate((previous) => ({
         ...previous,
