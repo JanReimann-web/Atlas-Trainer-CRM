@@ -4,6 +4,12 @@ export function getClient(state: CRMState, clientId: string) {
   return state.clients.find((client) => client.id === clientId);
 }
 
+export function getPurchaseLinkedClientIds(
+  purchase: CRMState["packagePurchases"][number],
+) {
+  return [...new Set([purchase.clientId, ...(purchase.sharedClientIds ?? [])])];
+}
+
 export function getLeadCounts(state: CRMState) {
   return state.leads.reduce<Record<string, number>>((acc, lead) => {
     if (lead.status === "converted") {
@@ -52,7 +58,7 @@ export function getClientUpcomingSession(state: CRMState, clientId: string) {
 
 export function getClientPurchases(state: CRMState, clientId: string) {
   return state.packagePurchases
-    .filter((purchase) => purchase.clientId === clientId)
+    .filter((purchase) => getPurchaseLinkedClientIds(purchase).includes(clientId))
     .sort((a, b) => b.purchasedAt.localeCompare(a.purchasedAt));
 }
 

@@ -14,6 +14,7 @@ import {
   getMonthlyRevenue,
   getOutstandingRevenue,
   getPackageLiability,
+  getPurchaseLinkedClientIds,
   getRemainingUnits,
   getSessionsToday,
   getUpcomingSessions,
@@ -32,7 +33,7 @@ export function DashboardScreen() {
   const clientsWithActivePackages = new Set(
     state.packagePurchases
       .filter((purchase) => getRemainingUnits(purchase) > 0)
-      .map((purchase) => purchase.clientId),
+      .flatMap((purchase) => getPurchaseLinkedClientIds(purchase)),
   ).size;
   const upcomingSessions = getUpcomingSessions(state, 4);
   const aiQueue = useMemo(

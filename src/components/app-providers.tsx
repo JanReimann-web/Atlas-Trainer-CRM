@@ -530,9 +530,27 @@ function removeClientFromState(previous: CRMState, clientId: string): CRMState {
         lead.email.toLowerCase() !== clientEmail,
     ),
     clients: previous.clients.filter((item) => item.id !== clientId),
-    packagePurchases: previous.packagePurchases.filter(
-      (purchase) => purchase.clientId !== clientId,
-    ),
+    packagePurchases: previous.packagePurchases.flatMap((purchase) => {
+      if (purchase.clientId === clientId) {
+        return [];
+      }
+
+      if (!(purchase.sharedClientIds ?? []).includes(clientId)) {
+        return [purchase];
+      }
+
+      const remainingSharedClientIds = (purchase.sharedClientIds ?? []).filter(
+        (sharedClientId) => sharedClientId !== clientId,
+      );
+
+      return [
+        {
+          ...purchase,
+          sharedClientIds:
+            remainingSharedClientIds.length > 0 ? remainingSharedClientIds : undefined,
+        },
+      ];
+    }),
     sessions: nextSessions.map((session) => ({
       ...session,
       plannedWorkoutId:
@@ -1586,6 +1604,17 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           return previous;
         }
 
+        const sharedClientIds =
+          template.tier === "duo"
+            ? [...new Set(input.sharedClientIds ?? [])]
+                .filter(
+                  (sharedClientId) =>
+                    sharedClientId !== input.clientId &&
+                    previous.clients.some((client) => client.id === sharedClientId),
+                )
+                .slice(0, Math.max(template.maxParticipants - 1, 0))
+            : [];
+
         const invoiceId = `inv-${crypto.randomUUID()}`;
         const purchaseId = `pkg-${crypto.randomUUID()}`;
         const paidAmount =
@@ -1608,6 +1637,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
             {
               id: purchaseId,
               clientId: input.clientId,
+              sharedClientIds: sharedClientIds.length > 0 ? sharedClientIds : undefined,
               templateId: input.templateId,
               purchasedAt: input.purchasedAt,
               startsAt: input.startsAt,
@@ -1655,7 +1685,15 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
               actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
               clientId: input.clientId,
               type: "package.created",
-              detail: `Added ${template.name} package purchase.`,
+              detail:
+                sharedClientIds.length > 0
+                  ? `Added ${template.name} package purchase with ${sharedClientIds
+                      .map((sharedClientId) =>
+                        previous.clients.find((client) => client.id === sharedClientId)?.fullName,
+                      )
+                      .filter(Boolean)
+                      .join(", ")}.`
+                  : `Added ${template.name} package purchase.`,
               createdAt: now,
             },
             ...previous.activityEvents,

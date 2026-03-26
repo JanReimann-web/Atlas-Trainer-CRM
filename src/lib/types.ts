@@ -138,6 +138,7 @@ export interface TrainingLocationInput {
 export interface PackagePurchase {
   id: string;
   clientId: string;
+  sharedClientIds?: string[];
   templateId: string;
   purchasedAt: string;
   startsAt: string;
@@ -152,6 +153,7 @@ export interface PackagePurchase {
 
 export interface CreatePackagePurchaseInput {
   clientId: string;
+  sharedClientIds?: string[];
   templateId: string;
   purchasedAt: string;
   startsAt: string;

@@ -21,6 +21,7 @@ import {
   getClientUpcomingSession,
   getClientWorkoutPlans,
   getPackageTemplate,
+  getPurchaseLinkedClientIds,
   getRemainingUnits,
 } from "@/lib/selectors";
 import {
@@ -83,6 +84,7 @@ type AssessmentMetricForm = {
 
 type PackageForm = {
   templateId: string;
+  sharedClientId: string;
   purchasedDate: string;
   startsDate: string;
   expiresDate: string;
@@ -210,6 +212,7 @@ function getSuggestedPaidAmount(
 function createPackageForm(templateId = "", templatePrice = 0): PackageForm {
   return {
     templateId,
+    sharedClientId: "",
     purchasedDate: dateInputValue(),
     startsDate: dateInputValue(),
     expiresDate: dateInputValue(60),
@@ -292,6 +295,30 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
   }, [state.packageTemplates]);
 
   useEffect(() => {
+    setPackageForm((current) => {
+      const template = state.packageTemplates.find((item) => item.id === current.templateId);
+      const sharedClientStillExists =
+        !current.sharedClientId ||
+        state.clients.some(
+          (linkedClient) =>
+            linkedClient.id === current.sharedClientId && linkedClient.id !== clientId,
+        );
+
+      if (
+        current.sharedClientId === "" ||
+        (template?.tier === "duo" && sharedClientStillExists)
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        sharedClientId: "",
+      };
+    });
+  }, [clientId, state.clients, state.packageTemplates]);
+
+  useEffect(() => {
     const defaultLocation = state.trainingLocations[0]?.name ?? "";
     setWorkoutEntryForm((current) =>
       current.location &&
@@ -340,6 +367,23 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     : [];
   const selectedPackageTemplate =
     state.packageTemplates.find((template) => template.id === packageForm.templateId) ?? null;
+  const availableSharedClients = state.clients
+    .filter((item) => item.id !== clientId)
+    .sort((left, right) => left.fullName.localeCompare(right.fullName));
+  const activePurchase = purchases[0];
+  const activePurchaseTemplate = activePurchase
+    ? getPackageTemplate(state, activePurchase.templateId)
+    : null;
+  const activePurchaseOwner =
+    activePurchase && activePurchase.clientId !== clientId
+      ? getClient(state, activePurchase.clientId)
+      : null;
+  const activePurchaseSharedClients = activePurchase
+    ? getPurchaseLinkedClientIds(activePurchase)
+        .filter((linkedClientId) => linkedClientId !== activePurchase.clientId)
+        .map((linkedClientId) => getClient(state, linkedClientId)?.fullName)
+        .filter(Boolean)
+    : [];
 
   function setPackageTemplate(templateId: string) {
     const nextTemplate = state.packageTemplates.find((template) => template.id === templateId);
@@ -348,6 +392,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     setPackageForm((current) => ({
       ...current,
       templateId,
+      sharedClientId: nextTemplate?.tier === "duo" ? current.sharedClientId : "",
       amountPaid: getSuggestedPaidAmount(current.paymentStatus, nextPrice, current.amountPaid),
     }));
   }
@@ -469,8 +514,17 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
       return;
     }
 
+    if (template.tier === "duo" && !packageForm.sharedClientId) {
+      setPackageError(t("forms.duoPartnerRequired"));
+      return;
+    }
+
     const input: CreatePackagePurchaseInput = {
       clientId,
+      sharedClientIds:
+        template.tier === "duo" && packageForm.sharedClientId
+          ? [packageForm.sharedClientId]
+          : [],
       templateId: packageForm.templateId,
       purchasedAt: isoFromDate(packageForm.purchasedDate, 9),
       startsAt: isoFromDate(packageForm.startsDate, 9),
@@ -709,10 +763,14 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard
           label={t("clients.packageLabel")}
-          value={String(purchases[0] ? getRemainingUnits(purchases[0]) : 0)}
+          value={String(activePurchase ? getRemainingUnits(activePurchase) : 0)}
           detail={
-            purchases[0]
-              ? `${getPackageTemplate(state, purchases[0].templateId)?.name} / ${t("clientProfile.activePackageDetail")}`
+            activePurchase
+              ? activePurchase.clientId !== clientId && activePurchaseOwner
+                ? `${activePurchaseTemplate?.name} / ${t("clientProfile.sharedPurchasePaidBy")}: ${activePurchaseOwner.fullName}`
+                : activePurchaseSharedClients.length > 0
+                  ? `${activePurchaseTemplate?.name} / ${t("clientProfile.sharedPurchaseWith")}: ${activePurchaseSharedClients.join(", ")}`
+                  : `${activePurchaseTemplate?.name} / ${t("clientProfile.activePackageDetail")}`
               : t("clientProfile.noActivePackage")
           }
         />
@@ -989,6 +1047,12 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
               purchases.map((purchase) => {
                 const template = getPackageTemplate(state, purchase.templateId);
                 const remainingUnits = getRemainingUnits(purchase);
+                const purchaseOwner =
+                  purchase.clientId !== clientId ? getClient(state, purchase.clientId) : null;
+                const sharedClientNames = getPurchaseLinkedClientIds(purchase)
+                  .filter((linkedClientId) => linkedClientId !== purchase.clientId)
+                  .map((linkedClientId) => getClient(state, linkedClientId)?.fullName)
+                  .filter((name): name is string => Boolean(name));
                 return (
                   <div key={purchase.id} className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -997,6 +1061,15 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                         <p className="text-sm text-[color:var(--muted-ink)]">
                           {formatDate(purchase.purchasedAt)} / {formatCurrency(purchase.price)}
                         </p>
+                        {purchaseOwner ? (
+                          <p className="text-sm text-[color:var(--muted-ink)]">
+                            {t("clientProfile.sharedPurchasePaidBy")}: {purchaseOwner.fullName}
+                          </p>
+                        ) : sharedClientNames.length > 0 ? (
+                          <p className="text-sm text-[color:var(--muted-ink)]">
+                            {t("clientProfile.sharedPurchaseWith")}: {sharedClientNames.join(", ")}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-3">
                         <StatusBadge status={purchase.paymentStatus} />
@@ -1049,6 +1122,30 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                   </select>
                 </DataLabel>
               </div>
+
+              {selectedPackageTemplate?.tier === "duo" ? (
+                <div className="mt-4">
+                  <DataLabel label={t("fields.sharedClient")}>
+                    <select
+                      value={packageForm.sharedClientId}
+                      onChange={(event) =>
+                        setPackageForm((current) => ({
+                          ...current,
+                          sharedClientId: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                    >
+                      <option value="">{t("common.none")}</option>
+                      {availableSharedClients.map((linkedClient) => (
+                        <option key={linkedClient.id} value={linkedClient.id}>
+                          {linkedClient.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </DataLabel>
+                </div>
+              ) : null}
 
               <DataLabel label={t("fields.paymentMethod")}>
                 <div className="grid grid-cols-2 gap-2 rounded-full bg-white/75 p-1">
@@ -1407,9 +1504,14 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                     <option value="">{t("common.none")}</option>
                     {purchases.map((purchase) => {
                       const template = getPackageTemplate(state, purchase.templateId);
+                      const purchaseOwner =
+                        purchase.clientId !== clientId ? getClient(state, purchase.clientId) : null;
                       return (
                         <option key={purchase.id} value={purchase.id}>
                           {template?.name} ({getRemainingUnits(purchase)})
+                          {purchaseOwner
+                            ? ` / ${t("clientProfile.sharedPurchasePaidBy")} ${purchaseOwner.fullName}`
+                            : ""}
                         </option>
                       );
                     })}
