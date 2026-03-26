@@ -42,6 +42,7 @@ export function SettingsScreen({
     createTrainingLocation,
     updateTrainingLocation,
     deleteTrainingLocation,
+    deleteClient,
   } = useCRM();
   const { t, locale, formatCurrency } = useLocaleContext();
   const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
@@ -50,6 +51,24 @@ export function SettingsScreen({
   const [locationForm, setLocationForm] = useState(() => buildLocationForm());
   const [packageError, setPackageError] = useState<string | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [clientDeleteQuery, setClientDeleteQuery] = useState("");
+  const [clientDeleteError, setClientDeleteError] = useState<string | null>(null);
+  const [deletingClientId, setDeletingClientId] = useState<string | null>(null);
+
+  const normalizedClientDeleteQuery = clientDeleteQuery.trim().toLowerCase();
+  const clientDeleteMatches = state.clients.filter((client) => {
+    if (!normalizedClientDeleteQuery) {
+      return true;
+    }
+
+    return [
+      client.fullName,
+      client.email,
+      client.phone,
+      client.tags.join(" "),
+      client.goals.join(" "),
+    ].some((value) => value.toLowerCase().includes(normalizedClientDeleteQuery));
+  });
 
   function getCatalogError(reason: string | undefined, type: "package" | "location") {
     if (reason === "duplicate") {
@@ -122,6 +141,33 @@ export function SettingsScreen({
     }
 
     resetLocationForm();
+  }
+
+  async function handleClientDelete(clientId: string) {
+    const client = state.clients.find((item) => item.id === clientId);
+    if (!client) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `${t("settings.clientDeleteConfirm")} ${client.fullName}?`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setClientDeleteError(null);
+    setDeletingClientId(clientId);
+
+    try {
+      await deleteClient(clientId);
+    } catch (error) {
+      setClientDeleteError(
+        error instanceof Error ? error.message : t("settings.clientDeleteFailed"),
+      );
+    } finally {
+      setDeletingClientId(null);
+    }
   }
 
   return (
@@ -447,6 +493,76 @@ export function SettingsScreen({
                 <StatusBadge status="ready" />
               </div>
               <p className="mt-2">{t("settings.translationNote")}</p>
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            title={t("settings.clientDelete")}
+            subtitle={t("settings.clientDeleteSubtitle")}
+          >
+            <div className="rounded-[24px] border border-rose-200 bg-rose-50/80 p-4">
+              <DataLabel label={t("common.search")}>
+                <input
+                  value={clientDeleteQuery}
+                  onChange={(event) => setClientDeleteQuery(event.target.value)}
+                  placeholder={t("settings.clientDeleteSearch")}
+                  className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm outline-none"
+                />
+              </DataLabel>
+              <p className="mt-4 text-sm leading-6 text-rose-950/80">
+                {t("settings.clientDeleteWarning")}
+              </p>
+            </div>
+
+            {clientDeleteError ? (
+              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                {clientDeleteError}
+              </div>
+            ) : null}
+
+            <div className="mt-5 space-y-3">
+              {state.clients.length === 0 ? (
+                <EmptyState
+                  title={t("settings.clientDelete")}
+                  body={t("settings.clientDeleteEmpty")}
+                />
+              ) : clientDeleteMatches.length === 0 ? (
+                <EmptyState
+                  title={t("settings.clientDelete")}
+                  body={t("forms.noSearchResults")}
+                />
+              ) : (
+                clientDeleteMatches.map((client) => (
+                  <div
+                    key={client.id}
+                    className="rounded-[22px] border border-rose-100 bg-white/70 p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="space-y-2">
+                        <p className="font-semibold text-[color:var(--ink)]">
+                          {client.fullName}
+                        </p>
+                        <p className="text-sm leading-6 text-[color:var(--muted-ink)]">
+                          {client.email} / {client.phone}
+                        </p>
+                        <p className="text-sm leading-6 text-[color:var(--muted-ink)]">
+                          {client.goals.join(", ") || "-"}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleClientDelete(client.id)}
+                        disabled={deletingClientId === client.id}
+                        className="rounded-full border border-rose-200 bg-rose-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {deletingClientId === client.id
+                          ? t("settings.clientDeleting")
+                          : t("settings.clientDeleteAction")}
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </SectionCard>
         </div>

@@ -16,6 +16,12 @@ import {
   signOut,
   User as FirebaseAuthUser,
 } from "firebase/auth";
+import {
+  deleteObject,
+  listAll,
+  ref as storageRef,
+  StorageReference,
+} from "firebase/storage";
 import { isAllowedEmail, normalizeEmail } from "@/lib/auth/allowed-emails";
 import { getFirebaseServices, isFirebaseConfigured } from "@/lib/firebase/client";
 import { saveCRMState, subscribeToCRMState } from "@/lib/firebase/crm-store";
@@ -49,6 +55,7 @@ import {
 
 const STATE_STORAGE_KEY = "atlas-trainer-crm-state";
 const LOCALE_STORAGE_KEY = "atlas-trainer-crm-locale";
+const FIREBASE_WORKSPACE_ID = process.env.NEXT_PUBLIC_FIREBASE_WORKSPACE_ID || "primary";
 
 type LocaleContextValue = {
   locale: Locale;
@@ -78,6 +85,7 @@ type CRMContextValue = {
   createClient: (input: CreateClientInput) => void;
   createClientFromLead: (leadId: string, input: CreateClientInput) => void;
   updateClient: (clientId: string, input: CreateClientInput) => void;
+  deleteClient: (clientId: string) => Promise<void>;
   createPackageTemplate: (input: PackageTemplateInput) => CatalogMutationResult;
   updatePackageTemplate: (
     templateId: string,
@@ -395,6 +403,179 @@ function describeNutritionRefreshTrigger(
   }
 
   return `Refreshed AI nutrition guidance for ${clientName} after a profile update.`;
+}
+
+function isStorageMissingError(error: unknown) {
+  if (
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    error.code === "storage/object-not-found"
+  ) {
+    return true;
+  }
+
+  return error instanceof Error && error.message.includes("storage/object-not-found");
+}
+
+async function deleteStorageFolderRecursive(reference: StorageReference): Promise<void> {
+  try {
+    const result = await listAll(reference);
+    await Promise.all(result.prefixes.map((child) => deleteStorageFolderRecursive(child)));
+    await Promise.all(result.items.map((item) => deleteObject(item)));
+  } catch (error) {
+    if (isStorageMissingError(error)) {
+      return;
+    }
+
+    throw error;
+  }
+}
+
+function removeClientFromState(previous: CRMState, clientId: string): CRMState {
+  const client = previous.clients.find((item) => item.id === clientId);
+  if (!client) {
+    return previous;
+  }
+
+  const clientEmail = client.email.toLowerCase();
+  const relatedLeadNames = new Set(
+    previous.leads
+      .filter(
+        (lead) =>
+          lead.id === client.originLeadId || lead.email.toLowerCase() === clientEmail,
+      )
+      .map((lead) => lead.fullName.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  relatedLeadNames.add(client.fullName.trim().toLowerCase());
+
+  const deletedPackagePurchaseIds = new Set(
+    previous.packagePurchases
+      .filter((purchase) => purchase.clientId === clientId)
+      .map((purchase) => purchase.id),
+  );
+  const deletedInvoiceIds = new Set(
+    previous.invoiceRecords
+      .filter(
+        (invoice) =>
+          invoice.clientId === clientId ||
+          deletedPackagePurchaseIds.has(invoice.packagePurchaseId),
+      )
+      .map((invoice) => invoice.id),
+  );
+  const deletedThreadIds = new Set(
+    previous.emailThreads
+      .filter((thread) => thread.clientId === clientId)
+      .map((thread) => thread.id),
+  );
+  const deletedSessionIds = new Set<string>();
+
+  const nextSessions = previous.sessions.flatMap((session) => {
+    if (!session.clientIds.includes(clientId) && session.primaryClientId !== clientId) {
+      return [session];
+    }
+
+    const remainingClientIds = session.clientIds.filter((id) => id !== clientId);
+    if (remainingClientIds.length === 0) {
+      deletedSessionIds.add(session.id);
+      return [];
+    }
+
+    return [
+      {
+        ...session,
+        clientIds: remainingClientIds,
+        primaryClientId:
+          session.primaryClientId === clientId
+            ? remainingClientIds[0]
+            : session.primaryClientId,
+        packagePurchaseId:
+          session.packagePurchaseId &&
+          deletedPackagePurchaseIds.has(session.packagePurchaseId)
+            ? undefined
+            : session.packagePurchaseId,
+      },
+    ];
+  });
+
+  const deletedPlannedWorkoutIds = new Set(
+    previous.plannedWorkouts
+      .filter(
+        (workout) =>
+          workout.clientId === clientId || deletedSessionIds.has(workout.sessionId),
+      )
+      .map((workout) => workout.id),
+  );
+
+  return {
+    ...previous,
+    leads: previous.leads.filter(
+      (lead) =>
+        lead.id !== client.originLeadId &&
+        lead.email.toLowerCase() !== clientEmail,
+    ),
+    clients: previous.clients.filter((item) => item.id !== clientId),
+    packagePurchases: previous.packagePurchases.filter(
+      (purchase) => purchase.clientId !== clientId,
+    ),
+    sessions: nextSessions.map((session) => ({
+      ...session,
+      plannedWorkoutId:
+        session.plannedWorkoutId && deletedPlannedWorkoutIds.has(session.plannedWorkoutId)
+          ? undefined
+          : session.plannedWorkoutId,
+    })),
+    plannedWorkouts: previous.plannedWorkouts.filter(
+      (workout) =>
+        workout.clientId !== clientId && !deletedSessionIds.has(workout.sessionId),
+    ),
+    sessionWorkouts: previous.sessionWorkouts.filter(
+      (workout) => !deletedSessionIds.has(workout.sessionId),
+    ),
+    bodyAssessments: previous.bodyAssessments.filter(
+      (assessment) => assessment.clientId !== clientId,
+    ),
+    workoutPlans: previous.workoutPlans.filter((plan) => plan.clientId !== clientId),
+    nutritionPlans: previous.nutritionPlans.filter((plan) => plan.clientId !== clientId),
+    emailThreads: previous.emailThreads.filter((thread) => thread.clientId !== clientId),
+    emailMessages: previous.emailMessages.filter(
+      (message) =>
+        message.clientId !== clientId && !deletedThreadIds.has(message.threadId),
+    ),
+    reminders: previous.reminders.filter(
+      (reminder) =>
+        reminder.clientId !== clientId &&
+        (!reminder.sessionId || !deletedSessionIds.has(reminder.sessionId)),
+    ),
+    invoiceRecords: previous.invoiceRecords.filter(
+      (invoice) =>
+        invoice.clientId !== clientId &&
+        !deletedPackagePurchaseIds.has(invoice.packagePurchaseId),
+    ),
+    paymentRecords: previous.paymentRecords.filter(
+      (payment) =>
+        payment.clientId !== clientId && !deletedInvoiceIds.has(payment.invoiceId),
+    ),
+    activityEvents: previous.activityEvents.filter((event) => {
+      if (event.clientId === clientId) {
+        return false;
+      }
+
+      if (event.type !== "lead.created") {
+        return true;
+      }
+
+      const detail = event.detail.toLowerCase();
+      return !Array.from(relatedLeadNames).some((name) => detail.includes(name));
+    }),
+    aiDrafts: previous.aiDrafts.filter(
+      (draft) =>
+        draft.clientId !== clientId &&
+        (!draft.sessionId || !deletedSessionIds.has(draft.sessionId)),
+    ),
+  };
 }
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
@@ -953,6 +1134,63 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           clientOverride: updatedClientSnapshot,
           trigger: "profile-update",
         });
+      }
+    },
+    deleteClient: async (clientId) => {
+      const previous = stateRef.current;
+      if (!previous.clients.some((item) => item.id === clientId)) {
+        return;
+      }
+
+      const next = removeClientFromState(previous, clientId);
+      if (next === previous) {
+        return;
+      }
+
+      setCrmError(null);
+      stateRef.current = next;
+      setState(next);
+
+      if (firebaseConfigured && authUser) {
+        const services = getFirebaseServices();
+        if (services) {
+          try {
+            const persistPromise = saveQueueRef.current.then(() =>
+              saveCRMState(services.db, next, previous),
+            );
+            saveQueueRef.current = persistPromise.catch((error) => {
+              setCrmError(
+                error instanceof Error
+                  ? error.message
+                  : "Could not sync CRM state to Firebase.",
+              );
+            });
+            await persistPromise;
+          } catch (error) {
+            stateRef.current = previous;
+            setState(previous);
+            const message =
+              error instanceof Error ? error.message : "Client deletion failed.";
+            setCrmError(message);
+            throw error;
+          }
+
+          try {
+            await deleteStorageFolderRecursive(
+              storageRef(
+                services.storage,
+                `workspaces/${FIREBASE_WORKSPACE_ID}/clients/${clientId}`,
+              ),
+            );
+          } catch (error) {
+            const message =
+              error instanceof Error
+                ? error.message
+                : "Client data was deleted, but storage cleanup failed.";
+            setCrmError(message);
+            throw error;
+          }
+        }
       }
     },
     createPackageTemplate: (input) => {

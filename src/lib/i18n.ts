@@ -414,6 +414,18 @@ const messages: Record<Locale, DictionaryTree> = {
       packageDeleteBlocked: "This package is already linked to existing purchases and cannot be deleted.",
       locationDeleteBlocked:
         "This location is already used in existing sessions and cannot be deleted.",
+      clientDelete: "Client deletion",
+      clientDeleteSubtitle:
+        "Search for a client and permanently remove the profile together with related CRM data.",
+      clientDeleteSearch: "Search by client name, email, or phone",
+      clientDeleteWarning:
+        "Deleting a client removes the profile, package purchases, sessions, assessments, reminders, communication history, AI drafts, and the client folder in Firebase Storage.",
+      clientDeleteEmpty: "No client profiles are available for deletion yet.",
+      clientDeleteConfirm:
+        "This action permanently deletes the client and all related data. Continue with",
+      clientDeleteAction: "Delete client",
+      clientDeleting: "Deleting...",
+      clientDeleteFailed: "Client deletion failed. Please try again.",
       translation: "Translation behavior",
       translationNote:
         "English is the default locale. Estonian mirrors navigation, help text, and draft framing so the coach can switch without losing context.",
@@ -870,6 +882,18 @@ const messages: Record<Locale, DictionaryTree> = {
       packageDeleteBlocked: "See pakett on juba seotud olemasolevate ostudega ja seda ei saa kustutada.",
       locationDeleteBlocked:
         "See asukoht on juba seotud olemasolevate treeningutega ja seda ei saa kustutada.",
+      clientDelete: "Kliendi kustutamine",
+      clientDeleteSubtitle:
+        "Otsi klient üles ja kustuta profiil koos kogu seotud CRM-i andmestikuga jäädavalt.",
+      clientDeleteSearch: "Otsi kliendi nime, e-posti või telefoni järgi",
+      clientDeleteWarning:
+        "Kliendi kustutamine eemaldab profiili, paketiostud, sessioonid, kehaanalüüsid, meeldetuletused, suhtlusajaloo, AI-mustandid ja kliendi kausta Firebase Storage'ist.",
+      clientDeleteEmpty: "Kustutamiseks pole veel ühtegi kliendiprofiili.",
+      clientDeleteConfirm:
+        "See tegevus kustutab kliendi ja kõik seotud andmed jäädavalt. Kas jätkan kliendiga",
+      clientDeleteAction: "Kustuta klient",
+      clientDeleting: "Kustutan...",
+      clientDeleteFailed: "Kliendi kustutamine ebaõnnestus. Proovi uuesti.",
       translation: "Tõlgete käitumine",
       translationNote:
         "Inglise keel on vaikevalik. Eesti keeles muutuvad korraga navigeerimine, abiaknad ja AI-mustandite raamid.",
