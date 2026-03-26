@@ -8,6 +8,7 @@ import { getUpcomingSessions } from "@/lib/selectors";
 
 export function InfoHint({ content }: { content: string }) {
   const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLSpanElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [panelPosition, setPanelPosition] = useState({
@@ -29,6 +30,33 @@ export function InfoHint({ content }: { content: string }) {
 
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      const target = event.target as Node | null;
+      if (!target) {
+        return;
+      }
+
+      if (wrapperRef.current?.contains(target) || panelRef.current?.contains(target)) {
+        return;
+      }
+
+      setOpen(false);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+    };
   }, [open]);
 
   useLayoutEffect(() => {
@@ -80,7 +108,7 @@ export function InfoHint({ content }: { content: string }) {
   }, [open]);
 
   return (
-    <>
+    <span ref={wrapperRef} className="inline-flex">
       <button
         ref={buttonRef}
         type="button"
@@ -93,12 +121,6 @@ export function InfoHint({ content }: { content: string }) {
 
       {open ? (
         <>
-          <button
-            type="button"
-            aria-label="Close help"
-            className="fixed inset-0 z-[60] bg-[rgba(25,31,26,0.24)]"
-            onClick={() => setOpen(false)}
-          />
           <div
             ref={panelRef}
             style={{
@@ -121,7 +143,7 @@ export function InfoHint({ content }: { content: string }) {
           </div>
         </>
       ) : null}
-    </>
+    </span>
   );
 }
 
