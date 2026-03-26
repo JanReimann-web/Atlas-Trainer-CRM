@@ -333,6 +333,11 @@ const messages: Record<Locale, DictionaryTree> = {
       subtitle: "Weekly schedule, reminder queue, and Outlook sync readiness.",
       reminderQueue: "Reminder queue",
       syncState: "Sync state",
+      upcomingEmpty: "No upcoming sessions are currently on the calendar.",
+      overdueEmpty: "No overdue follow-ups are waiting right now.",
+      overdueReminderDetail: "Past due reminder",
+      summaryDraftPending: "Workout recap draft is still unsent",
+      summaryDraftMissing: "Workout recap still needs to be generated",
     },
     plans: {
       title: "Adaptive planning",
@@ -745,6 +750,11 @@ const messages: Record<Locale, DictionaryTree> = {
       subtitle: "Nädalavaade, meeldetuletuste järjekord ja Outlooki sünkrooni valmisolek.",
       reminderQueue: "Meeldetuletuste järjekord",
       syncState: "Sünkrooni staatus",
+      upcomingEmpty: "Kalendris ei ole praegu ühtegi tulevast sessiooni.",
+      overdueEmpty: "Praegu ei oota ükski ületähtaja järeltegevus.",
+      overdueReminderDetail: "Ületähtaja meeldetuletus",
+      summaryDraftPending: "Treeningu kokkuvõtte mustand on veel saatmata",
+      summaryDraftMissing: "Treeningu kokkuvõte on veel genereerimata",
     },
     plans: {
       title: "Kohanduvad kavad",
