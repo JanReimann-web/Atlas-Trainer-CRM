@@ -77,7 +77,6 @@ export function DashboardScreen() {
       <div className="grid gap-6 xl:grid-cols-[1.3fr_1fr]">
         <SectionCard
           title={t("dashboard.agenda")}
-          subtitle={t("dashboard.agendaSubtitle")}
           help={t("help.calendar")}
         >
           <div className="space-y-3">
@@ -112,7 +111,6 @@ export function DashboardScreen() {
         <div className="grid gap-6">
           <SectionCard
             title={t("dashboard.focusBoard")}
-            subtitle={t("dashboard.focusBoardSubtitle")}
             help={t("help.finance")}
           >
             <div className="grid gap-3">
@@ -131,7 +129,6 @@ export function DashboardScreen() {
 
           <SectionCard
             title={t("dashboard.aiQueue")}
-            subtitle={t("dashboard.aiQueueSubtitle")}
             help={t("help.aiDrafts")}
           >
             <div className="space-y-3">
