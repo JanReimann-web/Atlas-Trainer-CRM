@@ -194,7 +194,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     { href: "/leads", label: t("nav.leads") },
     { href: "/clients", label: t("nav.clients") },
     { href: "/calendar", label: t("nav.calendar") },
-    { href: "/plans", label: t("nav.plans") },
     { href: "/communications", label: t("nav.communications") },
     { href: "/finance", label: t("nav.finance") },
     { href: "/settings", label: t("nav.settings") },

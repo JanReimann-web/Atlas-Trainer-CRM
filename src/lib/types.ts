@@ -248,6 +248,22 @@ export interface CreateBodyAssessmentInput {
   metrics: BodyMetricInput[];
 }
 
+export interface WorkoutSetInput {
+  label: string;
+  reps: string;
+  weightKg?: number;
+  tempo?: string;
+  rpe?: number;
+  note?: string;
+}
+
+export interface WorkoutExerciseInput {
+  name: string;
+  focus?: string;
+  note?: string;
+  sets: WorkoutSetInput[];
+}
+
 export interface WorkoutPlan {
   id: string;
   clientId: string;
@@ -260,6 +276,30 @@ export interface WorkoutPlan {
   createdAt: string;
   updatedAt: string;
   origin: "coach" | "ai";
+}
+
+export interface CreateWorkoutPlanInput {
+  clientId: string;
+  title: string;
+  goal: string;
+  focusAreas: string[];
+  sessionPattern: string[];
+  activeFrom: string;
+}
+
+export interface CreateWorkoutSessionInput {
+  clientId: string;
+  title: string;
+  objective: string;
+  startAt: string;
+  endAt: string;
+  kind: SessionKind;
+  status: "planned" | "completed";
+  location: string;
+  packagePurchaseId?: string;
+  coachNote?: string;
+  sessionNote?: string;
+  exercises: WorkoutExerciseInput[];
 }
 
 export interface NutritionPlan {

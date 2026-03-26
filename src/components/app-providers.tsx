@@ -35,6 +35,8 @@ import {
   CreateClientInput,
   CreateLeadInput,
   CreatePackagePurchaseInput,
+  CreateWorkoutPlanInput,
+  CreateWorkoutSessionInput,
   Locale,
   NutritionPlan,
   SessionExercise,
@@ -74,6 +76,8 @@ type CRMContextValue = {
   updateClient: (clientId: string, input: CreateClientInput) => void;
   addPackagePurchase: (input: CreatePackagePurchaseInput) => void;
   addBodyAssessment: (input: CreateBodyAssessmentInput) => void;
+  addWorkoutPlan: (input: CreateWorkoutPlanInput) => void;
+  addWorkoutSession: (input: CreateWorkoutSessionInput) => void;
   convertLeadToClient: (leadId: string) => void;
   updateLeadStatus: (leadId: string, status: CreateLeadInput["status"]) => void;
   markReminderDone: (reminderId: string) => void;
@@ -131,6 +135,12 @@ function timestamp() {
 function addDays(value: string, days: number) {
   const date = new Date(value);
   date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString();
+}
+
+function subtractHours(value: string, hours: number) {
+  const date = new Date(value);
+  date.setUTCHours(date.getUTCHours() - hours);
   return date.toISOString();
 }
 
@@ -203,6 +213,26 @@ function deriveExerciseStatus(exercise: SessionExercise): SessionExercise["statu
   }
 
   return changed ? "modified" : "planned";
+}
+
+function normalizeWorkoutExercises(input: CreateWorkoutSessionInput["exercises"]) {
+  return input
+    .map((exercise) => ({
+      ...exercise,
+      name: exercise.name.trim(),
+      focus: exercise.focus?.trim() || undefined,
+      note: exercise.note?.trim() || undefined,
+      sets: exercise.sets
+        .map((set, index) => ({
+          ...set,
+          label: set.label.trim() || String(index + 1),
+          reps: set.reps.trim(),
+          tempo: set.tempo?.trim() || undefined,
+          note: set.note?.trim() || undefined,
+        }))
+        .filter((set) => set.reps),
+    }))
+    .filter((exercise) => exercise.name && exercise.sets.length > 0);
 }
 
 function updateWorkout(
@@ -960,6 +990,191 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         });
       }
     },
+    addWorkoutPlan: (input) =>
+      applyCRMUpdate((previous) => {
+        if (!input.title.trim() || !input.goal.trim()) {
+          return previous;
+        }
+
+        const now = timestamp();
+        const nextPlan = {
+          id: `wp-${crypto.randomUUID()}`,
+          clientId: input.clientId,
+          title: input.title.trim(),
+          status: "active" as const,
+          goal: input.goal.trim(),
+          focusAreas: input.focusAreas.filter(Boolean),
+          sessionPattern: input.sessionPattern.filter(Boolean),
+          activeFrom: input.activeFrom,
+          createdAt: now,
+          updatedAt: now,
+          origin: "coach" as const,
+        };
+
+        return {
+          ...previous,
+          workoutPlans: [
+            nextPlan,
+            ...previous.workoutPlans.map((plan) =>
+              plan.clientId === input.clientId && plan.status === "active"
+                ? {
+                    ...plan,
+                    status: "archived" as const,
+                    updatedAt: now,
+                  }
+                : plan,
+            ),
+          ],
+          activityEvents: [
+            {
+              id: `act-${crypto.randomUUID()}`,
+              actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
+              clientId: input.clientId,
+              type: "workout-plan.created",
+              detail: `Saved ${nextPlan.title} as the active workout block.`,
+              createdAt: now,
+            },
+            ...previous.activityEvents,
+          ],
+        };
+      }),
+    addWorkoutSession: (input) =>
+      applyCRMUpdate((previous) => {
+        const exercises = normalizeWorkoutExercises(input.exercises);
+        if (!input.title.trim() || !input.startAt || !input.endAt || exercises.length === 0) {
+          return previous;
+        }
+
+        const now = timestamp();
+        const sessionId = `session-${crypto.randomUUID()}`;
+        const plannedWorkoutId = `pw-${crypto.randomUUID()}`;
+        const sessionWorkoutId = `sw-${crypto.randomUUID()}`;
+        const sourcePlanId =
+          previous.workoutPlans.find(
+            (plan) => plan.clientId === input.clientId && plan.status === "active",
+          )?.id ?? undefined;
+        const plannedWorkout = {
+          id: plannedWorkoutId,
+          clientId: input.clientId,
+          sessionId,
+          sourcePlanId,
+          title: input.title.trim(),
+          objective: input.objective.trim(),
+          createdAt: now,
+          exercises: exercises.map((exercise) => ({
+            id: `pex-${crypto.randomUUID()}`,
+            name: exercise.name,
+            focus: exercise.focus,
+            note: exercise.note,
+            sets: exercise.sets.map((set) => ({
+              id: `ps-${crypto.randomUUID()}`,
+              label: set.label,
+              reps: set.reps,
+              weightKg: set.weightKg,
+              tempo: set.tempo,
+              rpe: set.rpe,
+              note: set.note,
+            })),
+          })),
+        };
+        const sessionWorkout: SessionWorkout = {
+          id: sessionWorkoutId,
+          sessionId,
+          title: input.title.trim(),
+          status: input.status === "completed" ? "completed" : "draft",
+          exercises: plannedWorkout.exercises.map((exercise) => ({
+            id: `sex-${crypto.randomUUID()}`,
+            plannedExerciseId: exercise.id,
+            name: exercise.name,
+            status: input.status === "completed" ? "completed" : "planned",
+            note: exercise.note,
+            sets: exercise.sets.map((set) => ({
+              id: `set-${crypto.randomUUID()}`,
+              label: set.label,
+              targetReps: set.reps,
+              actualReps: set.reps,
+              targetWeightKg: set.weightKg,
+              actualWeightKg: set.weightKg,
+              tempo: set.tempo,
+              rpe: set.rpe,
+              completed: input.status === "completed",
+              note: set.note,
+            })),
+          })),
+          coachNote: input.coachNote?.trim() ?? "",
+          athleteFacingNote: "",
+          updatedAt: now,
+        };
+        const reminderAt =
+          input.status === "planned" ? subtractHours(input.startAt, 24) : undefined;
+
+        return {
+          ...previous,
+          sessions: [
+            {
+              id: sessionId,
+              title: input.title.trim(),
+              coachId: previous.users[0]?.id ?? "user-maria",
+              primaryClientId: input.clientId,
+              clientIds: [input.clientId],
+              kind: input.kind,
+              startAt: input.startAt,
+              endAt: input.endAt,
+              location: input.location.trim() || "Atlas Studio",
+              status: input.status,
+              packagePurchaseId: input.packagePurchaseId,
+              plannedWorkoutId,
+              sessionWorkoutId,
+              reminderAt,
+              calendarSync: "manual",
+              note: input.sessionNote?.trim() || input.objective.trim() || undefined,
+            },
+            ...previous.sessions,
+          ],
+          plannedWorkouts: [plannedWorkout, ...previous.plannedWorkouts],
+          sessionWorkouts: [sessionWorkout, ...previous.sessionWorkouts],
+          reminders:
+            input.status === "planned" && reminderAt
+              ? [
+                  {
+                    id: `rem-${crypto.randomUUID()}`,
+                    clientId: input.clientId,
+                    sessionId,
+                    title: "24h reminder",
+                    dueAt: reminderAt,
+                    channel: "calendar",
+                    status: "scheduled",
+                  },
+                  ...previous.reminders,
+                ]
+              : previous.reminders,
+          packagePurchases: previous.packagePurchases.map((purchase) =>
+            purchase.id === input.packagePurchaseId && input.status === "completed"
+              ? {
+                  ...purchase,
+                  usedUnits: Math.min(purchase.totalUnits, purchase.usedUnits + 1),
+                }
+              : purchase,
+          ),
+          activityEvents: [
+            {
+              id: `act-${crypto.randomUUID()}`,
+              actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
+              clientId: input.clientId,
+              type:
+                input.status === "completed"
+                  ? "session.logged"
+                  : "session.planned",
+              detail:
+                input.status === "completed"
+                  ? `Logged historical workout ${input.title.trim()}.`
+                  : `Planned workout ${input.title.trim()} from the client profile.`,
+              createdAt: now,
+            },
+            ...previous.activityEvents,
+          ],
+        };
+      }),
     convertLeadToClient: (leadId) => {
       let createdClient: ClientProfile | null = null;
 

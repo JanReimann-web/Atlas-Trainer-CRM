@@ -28,6 +28,8 @@ import {
   CreateBodyAssessmentInput,
   CreateClientInput,
   CreatePackagePurchaseInput,
+  CreateWorkoutPlanInput,
+  CreateWorkoutSessionInput,
   HealthFlag,
 } from "@/lib/types";
 import { PageLead } from "@/components/screens/shared";
@@ -55,9 +57,34 @@ const defaultClientProfileForm = {
   healthFlagsText: "",
 };
 
+type WorkoutSetForm = {
+  id: string;
+  label: string;
+  reps: string;
+  weightKg: string;
+  tempo: string;
+  rpe: string;
+  note: string;
+};
+
+type WorkoutExerciseForm = {
+  id: string;
+  name: string;
+  focus: string;
+  note: string;
+  sets: WorkoutSetForm[];
+};
+
 function splitCsv(value: string) {
   return value
     .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function splitLines(value: string) {
+  return value
+    .split("\n")
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -101,11 +128,69 @@ function buildClientProfileForm(client?: ClientProfile | null) {
   };
 }
 
+function createWorkoutSetForm(label: string): WorkoutSetForm {
+  return {
+    id: `set-form-${crypto.randomUUID()}`,
+    label,
+    reps: "",
+    weightKg: "",
+    tempo: "",
+    rpe: "",
+    note: "",
+  };
+}
+
+function createWorkoutExerciseForm(): WorkoutExerciseForm {
+  return {
+    id: `exercise-form-${crypto.randomUUID()}`,
+    name: "",
+    focus: "",
+    note: "",
+    sets: [createWorkoutSetForm("1"), createWorkoutSetForm("2"), createWorkoutSetForm("3")],
+  };
+}
+
+function renumberSetForms(sets: WorkoutSetForm[]) {
+  return sets.map((set, index) => ({
+    ...set,
+    label: String(index + 1),
+  }));
+}
+
+function createWorkoutEntryForm() {
+  return {
+    status: "planned",
+    title: "",
+    objective: "",
+    sessionDate: dateInputValue(),
+    startTime: "08:00",
+    durationMinutes: "60",
+    kind: "solo",
+    location: "Atlas Studio A",
+    packagePurchaseId: "",
+    coachNote: "",
+    sessionNote: "",
+    exercises: [createWorkoutExerciseForm()],
+  };
+}
+
+function combineDateTime(date: string, time: string) {
+  return `${date}T${time}:00.000Z`;
+}
+
+function addMinutesToIso(value: string, minutes: number) {
+  const date = new Date(value);
+  date.setUTCMinutes(date.getUTCMinutes() + minutes);
+  return date.toISOString();
+}
+
 export function ClientProfileScreen({ clientId }: { clientId: string }) {
   const {
     state,
     addPackagePurchase,
     addBodyAssessment,
+    addWorkoutPlan,
+    addWorkoutSession,
     updateClient,
     refreshNutritionPlan,
   } = useCRM();
@@ -136,6 +221,16 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
   });
   const [packageError, setPackageError] = useState<string | null>(null);
   const [assessmentError, setAssessmentError] = useState<string | null>(null);
+  const [workoutPlanForm, setWorkoutPlanForm] = useState({
+    title: "",
+    goal: "",
+    focusAreasText: "",
+    sessionPatternText: "",
+    activeFrom: dateInputValue(),
+  });
+  const [workoutEntryForm, setWorkoutEntryForm] = useState(() => createWorkoutEntryForm());
+  const [workoutPlanError, setWorkoutPlanError] = useState<string | null>(null);
+  const [workoutEntryError, setWorkoutEntryError] = useState<string | null>(null);
 
   if (!client) {
     return <EmptyState title={t("clientProfile.missingTitle")} body={t("clientProfile.missingBody")} />;
@@ -144,7 +239,8 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
   const purchases = getClientPurchases(state, clientId);
   const assessments = getClientAssessments(state, clientId);
   const sessions = getClientSessions(state, clientId);
-  const activePlan = getClientWorkoutPlans(state, clientId).find((plan) => plan.status === "active");
+  const workoutPlans = getClientWorkoutPlans(state, clientId);
+  const activePlan = workoutPlans.find((plan) => plan.status === "active");
   const nutritionPlan = getClientNutritionPlans(state, clientId).find(
     (plan) => plan.status === "active",
   );
@@ -324,6 +420,178 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
         { label: "", value: "", unit: "" },
       ],
     });
+  }
+
+  function submitWorkoutPlan(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setWorkoutPlanError(null);
+
+    if (!workoutPlanForm.title.trim() || !workoutPlanForm.goal.trim()) {
+      setWorkoutPlanError(t("forms.requiredError"));
+      return;
+    }
+
+    const input: CreateWorkoutPlanInput = {
+      clientId,
+      title: workoutPlanForm.title.trim(),
+      goal: workoutPlanForm.goal.trim(),
+      focusAreas: splitCsv(workoutPlanForm.focusAreasText),
+      sessionPattern: splitLines(workoutPlanForm.sessionPatternText),
+      activeFrom: isoFromDate(workoutPlanForm.activeFrom, 6),
+    };
+
+    addWorkoutPlan(input);
+    setWorkoutPlanForm({
+      title: "",
+      goal: "",
+      focusAreasText: "",
+      sessionPatternText: "",
+      activeFrom: dateInputValue(),
+    });
+  }
+
+  function submitWorkoutEntry(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setWorkoutEntryError(null);
+
+    if (
+      !workoutEntryForm.title.trim() ||
+      !workoutEntryForm.sessionDate ||
+      !workoutEntryForm.startTime
+    ) {
+      setWorkoutEntryError(t("forms.requiredError"));
+      return;
+    }
+
+    const durationMinutes = Number(workoutEntryForm.durationMinutes);
+    if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+      setWorkoutEntryError(t("forms.requiredError"));
+      return;
+    }
+
+    const exercises = workoutEntryForm.exercises
+      .map((exercise) => ({
+        name: exercise.name.trim(),
+        focus: exercise.focus.trim(),
+        note: exercise.note.trim(),
+        sets: exercise.sets
+          .map((set) => ({
+            label: set.label.trim() || "1",
+            reps: set.reps.trim(),
+            weightKg: set.weightKg === "" ? undefined : Number(set.weightKg),
+            tempo: set.tempo.trim(),
+            rpe: set.rpe === "" ? undefined : Number(set.rpe),
+            note: set.note.trim(),
+          }))
+          .filter((set) => set.reps),
+      }))
+      .filter((exercise) => exercise.name && exercise.sets.length > 0);
+
+    if (exercises.length === 0) {
+      setWorkoutEntryError(t("forms.requiredError"));
+      return;
+    }
+
+    const startAt = combineDateTime(workoutEntryForm.sessionDate, workoutEntryForm.startTime);
+    const endAt = addMinutesToIso(startAt, durationMinutes);
+    const input: CreateWorkoutSessionInput = {
+      clientId,
+      title: workoutEntryForm.title.trim(),
+      objective: workoutEntryForm.objective.trim(),
+      startAt,
+      endAt,
+      kind: workoutEntryForm.kind as CreateWorkoutSessionInput["kind"],
+      status: workoutEntryForm.status as CreateWorkoutSessionInput["status"],
+      location: workoutEntryForm.location.trim(),
+      packagePurchaseId: workoutEntryForm.packagePurchaseId || undefined,
+      coachNote: workoutEntryForm.coachNote.trim(),
+      sessionNote: workoutEntryForm.sessionNote.trim(),
+      exercises,
+    };
+
+    addWorkoutSession(input);
+    setWorkoutEntryForm(createWorkoutEntryForm());
+  }
+
+  function updateWorkoutExercise(
+    exerciseId: string,
+    patch: Partial<Omit<WorkoutExerciseForm, "id" | "sets">>,
+  ) {
+    setWorkoutEntryForm((current) => ({
+      ...current,
+      exercises: current.exercises.map((exercise) =>
+        exercise.id === exerciseId ? { ...exercise, ...patch } : exercise,
+      ),
+    }));
+  }
+
+  function updateWorkoutSet(
+    exerciseId: string,
+    setId: string,
+    patch: Partial<Omit<WorkoutSetForm, "id">>,
+  ) {
+    setWorkoutEntryForm((current) => ({
+      ...current,
+      exercises: current.exercises.map((exercise) =>
+        exercise.id === exerciseId
+          ? {
+              ...exercise,
+              sets: exercise.sets.map((set) => (set.id === setId ? { ...set, ...patch } : set)),
+            }
+          : exercise,
+      ),
+    }));
+  }
+
+  function addWorkoutExerciseField() {
+    setWorkoutEntryForm((current) => ({
+      ...current,
+      exercises: [...current.exercises, createWorkoutExerciseForm()],
+    }));
+  }
+
+  function removeWorkoutExerciseField(exerciseId: string) {
+    setWorkoutEntryForm((current) => ({
+      ...current,
+      exercises:
+        current.exercises.length === 1
+          ? current.exercises
+          : current.exercises.filter((exercise) => exercise.id !== exerciseId),
+    }));
+  }
+
+  function addWorkoutSetField(exerciseId: string) {
+    setWorkoutEntryForm((current) => ({
+      ...current,
+      exercises: current.exercises.map((exercise) =>
+        exercise.id === exerciseId
+          ? {
+              ...exercise,
+              sets: [
+                ...exercise.sets,
+                createWorkoutSetForm(String(exercise.sets.length + 1)),
+              ],
+            }
+          : exercise,
+      ),
+    }));
+  }
+
+  function removeWorkoutSetField(exerciseId: string, setId: string) {
+    setWorkoutEntryForm((current) => ({
+      ...current,
+      exercises: current.exercises.map((exercise) =>
+        exercise.id === exerciseId
+          ? {
+              ...exercise,
+              sets:
+                exercise.sets.length === 1
+                  ? exercise.sets
+                  : renumberSetForms(exercise.sets.filter((set) => set.id !== setId)),
+            }
+          : exercise,
+      ),
+    }));
   }
 
   return (
@@ -919,55 +1187,565 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
         </div>
       </SectionCard>
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <SectionCard title={t("clientProfile.workouts")} help={t("help.workoutPlan")}>
-          <div className="space-y-4">
-            {activePlan ? (
-              <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-[color:var(--ink)]">{activePlan.title}</p>
-                    <p className="text-sm leading-6 text-[color:var(--muted-ink)]">{activePlan.goal}</p>
-                  </div>
-                  <StatusBadge status={activePlan.status} />
-                </div>
-              </div>
-            ) : null}
+      <SectionCard
+        title={t("clientProfile.workouts")}
+        subtitle={t("clientProfile.workoutSectionSubtitle")}
+        help={t("help.workoutPlan")}
+      >
+        <datalist id={`exercise-library-${clientId}`}>
+          {state.exerciseLibrary.map((exercise) => (
+            <option key={exercise.id} value={exercise.name} />
+          ))}
+        </datalist>
 
-            <div className="space-y-3">
-              {sessions.slice().reverse().slice(0, 4).map((session) => (
-                <Link
-                  key={session.id}
-                  href={`/clients/${client.id}/sessions/${session.id}`}
-                  className="block rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-[color:var(--ink)]">{session.title}</p>
-                      <p className="text-sm text-[color:var(--muted-ink)]">{formatDate(session.startAt)}</p>
-                    </div>
-                    <StatusBadge status={session.status} />
+        <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+          <div className="space-y-4">
+            <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-[color:var(--ink)]">{t("clientProfile.workoutBlocks")}</p>
+                  <p className="mt-1 text-sm leading-6 text-[color:var(--muted-ink)]">
+                    {activePlan ? activePlan.goal : t("clientProfile.coachConfirmBlock")}
+                  </p>
+                </div>
+                {activePlan ? <StatusBadge status={activePlan.status} /> : null}
+              </div>
+
+              {activePlan ? (
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-2xl bg-[color:var(--sand-2)] p-4">
+                    <p className="font-semibold text-[color:var(--ink)]">{activePlan.title}</p>
+                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">
+                      {activePlan.goal}
+                    </p>
+                    {activePlan.focusAreas.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {activePlan.focusAreas.map((item) => (
+                          <span
+                            key={item}
+                            className="rounded-full border border-[color:var(--line-soft)] bg-white/75 px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                          >
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
-                </Link>
-              ))}
+
+                  <div className="space-y-3">
+                    {workoutPlans.slice(0, 4).map((plan) => (
+                      <div
+                        key={plan.id}
+                        className="rounded-2xl border border-[color:var(--line-soft)] bg-white/75 p-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-[color:var(--ink)]">{plan.title}</p>
+                            <p className="text-sm text-[color:var(--muted-ink)]">
+                              {formatDate(plan.updatedAt)}
+                            </p>
+                          </div>
+                          <StatusBadge status={plan.status} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4">
+                  <EmptyState
+                    title={t("common.none")}
+                    body={t("clientProfile.noWorkoutBlocks")}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="font-semibold text-[color:var(--ink)]">{t("clientProfile.recentSessions")}</p>
+                <span className="text-sm text-[color:var(--muted-ink)]">{sessions.length}</span>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {sessions.length === 0 ? (
+                  <EmptyState title={t("common.none")} body={t("clientProfile.noWorkoutHistory")} />
+                ) : (
+                  sessions
+                    .slice()
+                    .reverse()
+                    .slice(0, 6)
+                    .map((session) => (
+                      <Link
+                        key={session.id}
+                        href={`/clients/${client.id}/sessions/${session.id}`}
+                        className="block rounded-[24px] border border-[color:var(--line-soft)] bg-white/75 p-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-[color:var(--ink)]">{session.title}</p>
+                            <p className="text-sm text-[color:var(--muted-ink)]">
+                              {formatDate(session.startAt)}
+                            </p>
+                          </div>
+                          <StatusBadge status={session.status} />
+                        </div>
+                      </Link>
+                    ))
+                )}
+              </div>
             </div>
           </div>
-        </SectionCard>
 
-        <SectionCard title={t("clientProfile.communication")} help={t("help.communication")}>
-          <div className="space-y-3">
-            {messages.map((message) => (
-              <div key={message.id} className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-semibold text-[color:var(--ink)]">{message.subject}</p>
-                  <StatusBadge status={message.direction === "outbound" ? "sent" : "active"} />
-                </div>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">{message.body}</p>
+          <div className="space-y-5">
+            <form
+              className="rounded-[24px] border border-[color:var(--line-soft)] bg-[color:var(--sand-2)]/55 p-4"
+              onSubmit={submitWorkoutPlan}
+            >
+              <div className="mb-4 space-y-1">
+                <p className="font-semibold text-[color:var(--ink)]">{t("forms.workoutPlanTitle")}</p>
+                <p className="text-sm leading-6 text-[color:var(--muted-ink)]">
+                  {t("forms.workoutPlanSubtitle")}
+                </p>
               </div>
-            ))}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <DataLabel label={t("fields.title")}>
+                  <input
+                    value={workoutPlanForm.title}
+                    onChange={(event) =>
+                      setWorkoutPlanForm((current) => ({ ...current, title: event.target.value }))
+                    }
+                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                  />
+                </DataLabel>
+                <DataLabel label={t("fields.activeFrom")}>
+                  <input
+                    type="date"
+                    value={workoutPlanForm.activeFrom}
+                    onChange={(event) =>
+                      setWorkoutPlanForm((current) => ({
+                        ...current,
+                        activeFrom: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                  />
+                </DataLabel>
+              </div>
+
+              <DataLabel label={t("fields.goal")}>
+                <textarea
+                  value={workoutPlanForm.goal}
+                  onChange={(event) =>
+                    setWorkoutPlanForm((current) => ({ ...current, goal: event.target.value }))
+                  }
+                  rows={3}
+                  className="mt-4 w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm leading-6 outline-none"
+                />
+              </DataLabel>
+
+              <DataLabel label={t("fields.focusAreas")}>
+                <textarea
+                  value={workoutPlanForm.focusAreasText}
+                  onChange={(event) =>
+                    setWorkoutPlanForm((current) => ({
+                      ...current,
+                      focusAreasText: event.target.value,
+                    }))
+                  }
+                  rows={2}
+                  className="mt-4 w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm leading-6 outline-none"
+                />
+                <p className="text-xs text-[color:var(--muted-ink)]">{t("forms.commaHint")}</p>
+              </DataLabel>
+
+              <DataLabel label={t("fields.sessionPattern")}>
+                <textarea
+                  value={workoutPlanForm.sessionPatternText}
+                  onChange={(event) =>
+                    setWorkoutPlanForm((current) => ({
+                      ...current,
+                      sessionPatternText: event.target.value,
+                    }))
+                  }
+                  rows={3}
+                  className="mt-4 w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm leading-6 outline-none"
+                />
+              </DataLabel>
+
+              {workoutPlanError ? (
+                <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                  {workoutPlanError}
+                </div>
+              ) : null}
+
+              <button
+                type="submit"
+                className="mt-4 rounded-full bg-[color:var(--ink)] px-5 py-3 text-sm font-semibold text-white"
+              >
+                {t("forms.workoutPlanSubmit")}
+              </button>
+            </form>
+
+            <form
+              className="rounded-[24px] border border-[color:var(--line-soft)] bg-[color:var(--sand-2)]/55 p-4"
+              onSubmit={submitWorkoutEntry}
+            >
+              <div className="mb-4 space-y-1">
+                <p className="font-semibold text-[color:var(--ink)]">{t("forms.workoutSessionTitle")}</p>
+                <p className="text-sm leading-6 text-[color:var(--muted-ink)]">
+                  {t("forms.workoutSessionSubtitle")}
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <DataLabel label={t("fields.status")}>
+                  <select
+                    value={workoutEntryForm.status}
+                    onChange={(event) =>
+                      setWorkoutEntryForm((current) => ({
+                        ...current,
+                        status: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                  >
+                    <option value="planned">{t("status.planned")}</option>
+                    <option value="completed">{t("status.completed")}</option>
+                  </select>
+                </DataLabel>
+                <DataLabel label={t("fields.sessionKind")}>
+                  <select
+                    value={workoutEntryForm.kind}
+                    onChange={(event) =>
+                      setWorkoutEntryForm((current) => ({
+                        ...current,
+                        kind: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                  >
+                    <option value="solo">{t("sessionKind.solo")}</option>
+                    <option value="duo">{t("sessionKind.duo")}</option>
+                    <option value="group">{t("sessionKind.group")}</option>
+                  </select>
+                </DataLabel>
+              </div>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <DataLabel label={t("fields.title")}>
+                  <input
+                    value={workoutEntryForm.title}
+                    onChange={(event) =>
+                      setWorkoutEntryForm((current) => ({ ...current, title: event.target.value }))
+                    }
+                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                  />
+                </DataLabel>
+                <DataLabel label={t("fields.location")}>
+                  <input
+                    value={workoutEntryForm.location}
+                    onChange={(event) =>
+                      setWorkoutEntryForm((current) => ({
+                        ...current,
+                        location: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                  />
+                </DataLabel>
+              </div>
+
+              <DataLabel label={t("fields.objective")}>
+                <textarea
+                  value={workoutEntryForm.objective}
+                  onChange={(event) =>
+                    setWorkoutEntryForm((current) => ({
+                      ...current,
+                      objective: event.target.value,
+                    }))
+                  }
+                  rows={3}
+                  className="mt-4 w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm leading-6 outline-none"
+                />
+              </DataLabel>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-[1fr_0.7fr_0.7fr]">
+                <DataLabel label={t("fields.sessionDate")}>
+                  <input
+                    type="date"
+                    value={workoutEntryForm.sessionDate}
+                    onChange={(event) =>
+                      setWorkoutEntryForm((current) => ({
+                        ...current,
+                        sessionDate: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                  />
+                </DataLabel>
+                <DataLabel label={t("fields.startTime")}>
+                  <input
+                    type="time"
+                    value={workoutEntryForm.startTime}
+                    onChange={(event) =>
+                      setWorkoutEntryForm((current) => ({
+                        ...current,
+                        startTime: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                  />
+                </DataLabel>
+                <DataLabel label={t("fields.durationMinutes")}>
+                  <input
+                    type="number"
+                    min="15"
+                    step="5"
+                    value={workoutEntryForm.durationMinutes}
+                    onChange={(event) =>
+                      setWorkoutEntryForm((current) => ({
+                        ...current,
+                        durationMinutes: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                  />
+                </DataLabel>
+              </div>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
+                <DataLabel label={t("fields.packagePurchase")}>
+                  <select
+                    value={workoutEntryForm.packagePurchaseId}
+                    onChange={(event) =>
+                      setWorkoutEntryForm((current) => ({
+                        ...current,
+                        packagePurchaseId: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                  >
+                    <option value="">{t("common.none")}</option>
+                    {purchases.map((purchase) => {
+                      const template = getPackageTemplate(state, purchase.templateId);
+                      return (
+                        <option key={purchase.id} value={purchase.id}>
+                          {template?.name} ({getRemainingUnits(purchase)})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </DataLabel>
+                <DataLabel label={t("workout.coachNotes")}>
+                  <input
+                    value={workoutEntryForm.coachNote}
+                    onChange={(event) =>
+                      setWorkoutEntryForm((current) => ({
+                        ...current,
+                        coachNote: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                  />
+                </DataLabel>
+              </div>
+
+              <DataLabel label={t("fields.notes")}>
+                <textarea
+                  value={workoutEntryForm.sessionNote}
+                  onChange={(event) =>
+                    setWorkoutEntryForm((current) => ({
+                      ...current,
+                      sessionNote: event.target.value,
+                    }))
+                  }
+                  rows={2}
+                  className="mt-4 w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm leading-6 outline-none"
+                />
+              </DataLabel>
+
+              <div className="mt-5 space-y-4">
+                {workoutEntryForm.exercises.map((exercise, exerciseIndex) => (
+                  <div
+                    key={exercise.id}
+                    className="rounded-[22px] border border-[color:var(--line-soft)] bg-white/70 p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="font-semibold text-[color:var(--ink)]">
+                        {t("fields.exerciseName")} {exerciseIndex + 1}
+                      </p>
+                      {workoutEntryForm.exercises.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => removeWorkoutExerciseField(exercise.id)}
+                          className="rounded-full border border-[color:var(--line-soft)] px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                        >
+                          {t("workout.removeExercise")}
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                      <DataLabel label={t("fields.exerciseName")}>
+                        <input
+                          list={`exercise-library-${clientId}`}
+                          value={exercise.name}
+                          onChange={(event) =>
+                            updateWorkoutExercise(exercise.id, { name: event.target.value })
+                          }
+                          className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                        />
+                      </DataLabel>
+                      <DataLabel label={t("fields.exerciseFocus")}>
+                        <input
+                          value={exercise.focus}
+                          onChange={(event) =>
+                            updateWorkoutExercise(exercise.id, { focus: event.target.value })
+                          }
+                          className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                        />
+                      </DataLabel>
+                    </div>
+
+                    <DataLabel label={t("workout.exerciseNote")}>
+                      <input
+                        value={exercise.note}
+                        onChange={(event) =>
+                          updateWorkoutExercise(exercise.id, { note: event.target.value })
+                        }
+                        className="mt-4 w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                      />
+                    </DataLabel>
+
+                    <div className="mt-4 space-y-3">
+                      {exercise.sets.map((set) => (
+                        <div key={set.id} className="rounded-2xl bg-[color:var(--sand-2)]/75 p-3">
+                          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                            <p className="text-sm font-semibold text-[color:var(--ink)]">
+                              {t("workout.setColumn")} {set.label}
+                            </p>
+                            {exercise.sets.length > 1 ? (
+                              <button
+                                type="button"
+                                onClick={() => removeWorkoutSetField(exercise.id, set.id)}
+                                className="rounded-full border border-[color:var(--line-soft)] px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                              >
+                                {t("workout.removeSet")}
+                              </button>
+                            ) : null}
+                          </div>
+
+                          <div className="grid gap-3 md:grid-cols-[0.95fr_0.75fr_0.75fr_0.75fr]">
+                            <DataLabel label={t("fields.setReps")}>
+                              <input
+                                value={set.reps}
+                                onChange={(event) =>
+                                  updateWorkoutSet(exercise.id, set.id, {
+                                    reps: event.target.value,
+                                  })
+                                }
+                                className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                              />
+                            </DataLabel>
+                            <DataLabel label={t("fields.setWeight")}>
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={set.weightKg}
+                                onChange={(event) =>
+                                  updateWorkoutSet(exercise.id, set.id, {
+                                    weightKg: event.target.value,
+                                  })
+                                }
+                                className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                              />
+                            </DataLabel>
+                            <DataLabel label={t("fields.setTempo")}>
+                              <input
+                                value={set.tempo}
+                                onChange={(event) =>
+                                  updateWorkoutSet(exercise.id, set.id, {
+                                    tempo: event.target.value,
+                                  })
+                                }
+                                className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                              />
+                            </DataLabel>
+                            <DataLabel label={t("workout.rpe")}>
+                              <input
+                                type="number"
+                                step="0.5"
+                                min="1"
+                                max="10"
+                                value={set.rpe}
+                                onChange={(event) =>
+                                  updateWorkoutSet(exercise.id, set.id, {
+                                    rpe: event.target.value,
+                                  })
+                                }
+                                className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                              />
+                            </DataLabel>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => addWorkoutSetField(exercise.id)}
+                        className="rounded-full border border-[color:var(--line-soft)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+                      >
+                        {t("workout.addSet")}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={addWorkoutExerciseField}
+                  className="rounded-full border border-[color:var(--line-soft)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+                >
+                  {t("workout.addExercise")}
+                </button>
+              </div>
+
+              {workoutEntryError ? (
+                <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                  {workoutEntryError}
+                </div>
+              ) : null}
+
+              <button
+                type="submit"
+                className="mt-4 rounded-full bg-[color:var(--ink)] px-5 py-3 text-sm font-semibold text-white"
+              >
+                {t("forms.workoutSessionSubmit")}
+              </button>
+            </form>
           </div>
-        </SectionCard>
-      </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard title={t("clientProfile.communication")} help={t("help.communication")}>
+        <div className="space-y-3">
+          {messages.map((message) => (
+            <div key={message.id} className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-semibold text-[color:var(--ink)]">{message.subject}</p>
+                <StatusBadge status={message.direction === "outbound" ? "sent" : "active"} />
+              </div>
+              <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">{message.body}</p>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
 
       <SectionCard title={t("clientProfile.drafts")} help={t("help.aiDrafts")}>
         <div className="grid gap-4 md:grid-cols-3">
