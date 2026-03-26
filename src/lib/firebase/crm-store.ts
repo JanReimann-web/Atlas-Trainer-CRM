@@ -143,6 +143,12 @@ export function subscribeToCRMState(
     stateCollection(db),
     (snapshot) => {
       if (snapshot.empty) {
+        // Firestore can emit an empty cache snapshot before the server responds.
+        // Do not seed from mock data until the backend confirms the workspace is truly empty.
+        if (snapshot.metadata.fromCache) {
+          return;
+        }
+
         if (!seeded) {
           seeded = true;
           void seedCRMState(db).catch((error) => {
