@@ -126,7 +126,7 @@ export function LeadsScreen() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
-        <SectionCard title={t("forms.leadTitle")} subtitle={t("forms.leadSubtitle")}>
+        <SectionCard title={t("forms.leadTitle")}>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="grid gap-4 md:grid-cols-2">
               <DataLabel label={t("fields.fullName")}>
@@ -223,7 +223,6 @@ export function LeadsScreen() {
 
         <SectionCard
           title={t("leads.title")}
-          subtitle={t("leads.sectionSubtitle")}
           help={t("help.leadStatus")}
           aside={
             <input
@@ -274,13 +273,13 @@ export function LeadsScreen() {
                     </p>
                     <p>{formatDate(lead.lastContactAt)}</p>
                   </div>
-                  <div className="mt-5 flex flex-wrap gap-3">
+                  <div className="mt-5 flex flex-wrap items-center gap-3">
                     <select
                       value={lead.status}
                       onChange={(event) =>
                         updateLeadStatus(lead.id, event.target.value as CreateLeadInput["status"])
                       }
-                      className="rounded-full border border-[color:var(--line-soft)] bg-white/90 px-4 py-2 text-sm text-[color:var(--ink)] outline-none"
+                      className="min-w-[180px] rounded-full border border-[color:var(--line-soft)] bg-white/90 px-4 py-2 text-sm text-[color:var(--ink)] outline-none"
                     >
                       {visibleLeadStatuses.map((status) => (
                         <option key={status} value={status}>
@@ -288,35 +287,37 @@ export function LeadsScreen() {
                         </option>
                       ))}
                     </select>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const params = new URLSearchParams({
-                          fromLead: lead.id,
-                          fullName: lead.fullName,
-                          email: lead.email,
-                          phone: lead.phone,
-                          goal: lead.goal,
-                          tagsText: "new-client",
-                          notes: lead.notes,
-                        });
-                        router.push(`/clients?${params.toString()}`);
-                      }}
-                      disabled={lead.status === "converted"}
-                      className="rounded-full bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-300"
-                    >
-                      {lead.status === "converted" ? t("leads.converted") : t("leads.convert")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleLeadDelete(lead.id, lead.fullName)}
-                      disabled={deletingLeadId === lead.id}
-                      className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-900 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {deletingLeadId === lead.id
-                        ? t("leads.deleting")
-                        : t("common.delete")}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const params = new URLSearchParams({
+                            fromLead: lead.id,
+                            fullName: lead.fullName,
+                            email: lead.email,
+                            phone: lead.phone,
+                            goal: lead.goal,
+                            tagsText: "new-client",
+                            notes: lead.notes,
+                          });
+                          router.push(`/clients?${params.toString()}`);
+                        }}
+                        disabled={lead.status === "converted"}
+                        className="rounded-full bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-300"
+                      >
+                        {lead.status === "converted" ? t("leads.converted") : t("leads.convert")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleLeadDelete(lead.id, lead.fullName)}
+                        disabled={deletingLeadId === lead.id}
+                        aria-label={t("common.delete")}
+                        title={t("common.delete")}
+                        className="flex h-10 w-10 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-base leading-none text-rose-900 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
