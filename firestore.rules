@@ -21,29 +21,6 @@ service cloud.firestore {
         && request.resource.data.version == 1;
     }
 
-    function isStateSliceId(sliceId) {
-      return sliceId == "users"
-        || sliceId == "leads"
-        || sliceId == "clients"
-        || sliceId == "packageTemplates"
-        || sliceId == "trainingLocations"
-        || sliceId == "packagePurchases"
-        || sliceId == "sessions"
-        || sliceId == "plannedWorkouts"
-        || sliceId == "sessionWorkouts"
-        || sliceId == "bodyAssessments"
-        || sliceId == "workoutPlans"
-        || sliceId == "nutritionPlans"
-        || sliceId == "exerciseLibrary"
-        || sliceId == "emailThreads"
-        || sliceId == "emailMessages"
-        || sliceId == "reminders"
-        || sliceId == "invoiceRecords"
-        || sliceId == "paymentRecords"
-        || sliceId == "activityEvents"
-        || sliceId == "aiDrafts";
-    }
-
     function isStateSliceWrite() {
       return request.resource.data.keys().hasOnly([
           "items",
@@ -61,10 +38,11 @@ service cloud.firestore {
       allow delete: if false;
 
       match /state/{sliceId} {
-        allow read: if isAuthorizedCoach() && isStateSliceId(sliceId);
-        allow create, update: if isAuthorizedCoach()
-          && isStateSliceId(sliceId)
-          && isStateSliceWrite();
+        // The app reads the entire state subcollection with one query on refresh.
+        // Query rules therefore need to allow every document in this collection,
+        // not only a whitelist of specific IDs, or Firestore rejects the whole query.
+        allow read: if isAuthorizedCoach();
+        allow create, update: if isAuthorizedCoach() && isStateSliceWrite();
         allow delete: if false;
       }
     }
