@@ -20,7 +20,6 @@ const defaultClientForm = {
   phone: "",
   gender: "unspecified",
   goalsText: "",
-  tagsText: "",
   notes: "",
   healthFlagsText: "",
 };
@@ -60,7 +59,6 @@ export function ClientsScreen() {
     email: searchParams.get("email") ?? "",
     phone: searchParams.get("phone") ?? "",
     goalsText: searchParams.get("goal") ?? "",
-    tagsText: searchParams.get("tagsText") ?? "",
     notes: searchParams.get("notes") ?? "",
   }));
   const [formError, setFormError] = useState<string | null>(null);
@@ -118,7 +116,7 @@ export function ClientsScreen() {
       preferredLanguage:
         fromLead?.preferredLanguage ?? (locale as CreateClientInput["preferredLanguage"]),
       goals: splitCsv(form.goalsText),
-      tags: splitCsv(form.tagsText),
+      tags: [],
       consentStatus: "signed",
       notes: form.notes.trim(),
       healthFlags: parseHealthFlags(form.healthFlagsText),
@@ -137,7 +135,7 @@ export function ClientsScreen() {
       <PageLead eyebrow={t("nav.clients")} title={t("clients.title")} />
 
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <SectionCard title={t("forms.clientTitle")} subtitle={t("forms.clientSubtitle")}>
+        <SectionCard title={t("forms.clientTitle")}>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="grid gap-4 md:grid-cols-2">
               <DataLabel label={t("fields.fullName")}>
@@ -181,17 +179,6 @@ export function ClientsScreen() {
                 rows={3}
                 className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/85 px-4 py-3 text-sm leading-6 outline-none"
               />
-              <p className="text-xs text-[color:var(--muted-ink)]">{t("forms.commaHint")}</p>
-            </DataLabel>
-
-            <DataLabel label={t("fields.tags")}>
-              <textarea
-                value={form.tagsText}
-                onChange={(event) => updateField("tagsText", event.target.value)}
-                rows={2}
-                className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/85 px-4 py-3 text-sm leading-6 outline-none"
-              />
-              <p className="text-xs text-[color:var(--muted-ink)]">{t("forms.commaHint")}</p>
             </DataLabel>
 
             <DataLabel label={t("fields.healthFlags")}>
@@ -201,7 +188,6 @@ export function ClientsScreen() {
                 rows={3}
                 className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/85 px-4 py-3 text-sm leading-6 outline-none"
               />
-              <p className="text-xs text-[color:var(--muted-ink)]">{t("forms.healthFlagsHint")}</p>
             </DataLabel>
 
             <DataLabel label={t("fields.notes")}>
@@ -230,7 +216,6 @@ export function ClientsScreen() {
 
         <SectionCard
           title={t("clients.title")}
-          subtitle={t("clients.sectionSubtitle")}
           aside={
             <input
               value={query}
