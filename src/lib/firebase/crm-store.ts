@@ -19,6 +19,7 @@ const STATE_SLICE_KEYS = [
   "leads",
   "clients",
   "packageTemplates",
+  "trainingLocations",
   "packagePurchases",
   "sessions",
   "plannedWorkouts",

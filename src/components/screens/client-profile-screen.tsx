@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useCRM, useLocaleContext } from "@/components/app-providers";
 import {
   DataLabel,
@@ -157,7 +157,7 @@ function renumberSetForms(sets: WorkoutSetForm[]) {
   }));
 }
 
-function createWorkoutEntryForm() {
+function createWorkoutEntryForm(defaultLocation = "") {
   return {
     status: "planned",
     title: "",
@@ -166,7 +166,7 @@ function createWorkoutEntryForm() {
     startTime: "08:00",
     durationMinutes: "60",
     kind: "solo",
-    location: "Atlas Studio A",
+    location: defaultLocation,
     packagePurchaseId: "",
     coachNote: "",
     sessionNote: "",
@@ -228,9 +228,31 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     sessionPatternText: "",
     activeFrom: dateInputValue(),
   });
-  const [workoutEntryForm, setWorkoutEntryForm] = useState(() => createWorkoutEntryForm());
+  const [workoutEntryForm, setWorkoutEntryForm] = useState(() =>
+    createWorkoutEntryForm(state.trainingLocations[0]?.name ?? ""),
+  );
   const [workoutPlanError, setWorkoutPlanError] = useState<string | null>(null);
   const [workoutEntryError, setWorkoutEntryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const defaultTemplateId = state.packageTemplates[0]?.id ?? "";
+    setPackageForm((current) =>
+      current.templateId &&
+      state.packageTemplates.some((template) => template.id === current.templateId)
+        ? current
+        : { ...current, templateId: defaultTemplateId },
+    );
+  }, [state.packageTemplates]);
+
+  useEffect(() => {
+    const defaultLocation = state.trainingLocations[0]?.name ?? "";
+    setWorkoutEntryForm((current) =>
+      current.location &&
+      state.trainingLocations.some((location) => location.name === current.location)
+        ? current
+        : { ...current, location: defaultLocation },
+    );
+  }, [state.trainingLocations]);
 
   if (!client) {
     return <EmptyState title={t("clientProfile.missingTitle")} body={t("clientProfile.missingBody")} />;
@@ -457,7 +479,8 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     if (
       !workoutEntryForm.title.trim() ||
       !workoutEntryForm.sessionDate ||
-      !workoutEntryForm.startTime
+      !workoutEntryForm.startTime ||
+      !workoutEntryForm.location.trim()
     ) {
       setWorkoutEntryError(t("forms.requiredError"));
       return;
@@ -510,7 +533,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     };
 
     addWorkoutSession(input);
-    setWorkoutEntryForm(createWorkoutEntryForm());
+    setWorkoutEntryForm(createWorkoutEntryForm(state.trainingLocations[0]?.name ?? ""));
   }
 
   function updateWorkoutExercise(
@@ -1444,7 +1467,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                   />
                 </DataLabel>
                 <DataLabel label={t("fields.location")}>
-                  <input
+                  <select
                     value={workoutEntryForm.location}
                     onChange={(event) =>
                       setWorkoutEntryForm((current) => ({
@@ -1452,8 +1475,18 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                         location: event.target.value,
                       }))
                     }
+                    disabled={state.trainingLocations.length === 0}
                     className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-                  />
+                  >
+                    {state.trainingLocations.length === 0 ? (
+                      <option value="">{t("common.none")}</option>
+                    ) : null}
+                    {state.trainingLocations.map((location) => (
+                      <option key={location.id} value={location.name}>
+                        {location.name}
+                      </option>
+                    ))}
+                  </select>
                 </DataLabel>
               </div>
 

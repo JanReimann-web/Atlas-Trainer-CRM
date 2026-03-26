@@ -20,6 +20,7 @@ export type DraftType =
 export type DraftStatus = "draft" | "reviewed" | "sent";
 export type CalendarSyncState = "synced" | "pending" | "manual";
 export type ReminderStatus = "scheduled" | "sent" | "done";
+export type CatalogMutationReason = "duplicate" | "in-use" | "invalid" | "not-found";
 export type SessionExerciseStatus =
   | "planned"
   | "completed"
@@ -99,15 +100,38 @@ export interface CreateClientInput {
   healthFlags: HealthFlag[];
 }
 
+export interface CatalogMutationResult {
+  ok: boolean;
+  reason?: CatalogMutationReason;
+}
+
 export interface PackageTemplate {
   id: string;
   name: string;
-  sessionCount: 1 | 3 | 7;
+  sessionCount: number;
   tier: SessionKind;
   maxParticipants: number;
   durationMinutes: number;
   price: number;
   currency: Currency;
+}
+
+export interface PackageTemplateInput {
+  name: string;
+  sessionCount: number;
+  tier: SessionKind;
+  maxParticipants: number;
+  durationMinutes: number;
+  price: number;
+}
+
+export interface TrainingLocation {
+  id: string;
+  name: string;
+}
+
+export interface TrainingLocationInput {
+  name: string;
 }
 
 export interface PackagePurchase {
@@ -410,6 +434,7 @@ export interface CRMState {
   leads: Lead[];
   clients: ClientProfile[];
   packageTemplates: PackageTemplate[];
+  trainingLocations: TrainingLocation[];
   packagePurchases: PackagePurchase[];
   sessions: Session[];
   plannedWorkouts: PlannedWorkout[];

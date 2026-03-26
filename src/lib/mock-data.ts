@@ -215,6 +215,20 @@ export const initialCRMState: CRMState = {
       currency: "EUR",
     },
   ],
+  trainingLocations: [
+    {
+      id: "location-atlas-a",
+      name: "Atlas Studio A",
+    },
+    {
+      id: "location-atlas-b",
+      name: "Atlas Studio B",
+    },
+    {
+      id: "location-atlas-c",
+      name: "Atlas Studio C",
+    },
+  ],
   packagePurchases: [
     {
       id: "pkg-ava-7",

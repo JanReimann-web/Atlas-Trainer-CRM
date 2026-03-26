@@ -29,6 +29,7 @@ import {
 import {
   AIDraft,
   BodyAssessment,
+  CatalogMutationResult,
   CRMState,
   ClientProfile,
   CreateBodyAssessmentInput,
@@ -39,8 +40,11 @@ import {
   CreateWorkoutSessionInput,
   Locale,
   NutritionPlan,
+  PackageTemplateInput,
   SessionExercise,
   SessionWorkout,
+  TrainingLocation,
+  TrainingLocationInput,
 } from "@/lib/types";
 
 const STATE_STORAGE_KEY = "atlas-trainer-crm-state";
@@ -74,6 +78,18 @@ type CRMContextValue = {
   createClient: (input: CreateClientInput) => void;
   createClientFromLead: (leadId: string, input: CreateClientInput) => void;
   updateClient: (clientId: string, input: CreateClientInput) => void;
+  createPackageTemplate: (input: PackageTemplateInput) => CatalogMutationResult;
+  updatePackageTemplate: (
+    templateId: string,
+    input: PackageTemplateInput,
+  ) => CatalogMutationResult;
+  deletePackageTemplate: (templateId: string) => CatalogMutationResult;
+  createTrainingLocation: (input: TrainingLocationInput) => CatalogMutationResult;
+  updateTrainingLocation: (
+    locationId: string,
+    input: TrainingLocationInput,
+  ) => CatalogMutationResult;
+  deleteTrainingLocation: (locationId: string) => CatalogMutationResult;
   addPackagePurchase: (input: CreatePackagePurchaseInput) => void;
   addBodyAssessment: (input: CreateBodyAssessmentInput) => void;
   addWorkoutPlan: (input: CreateWorkoutPlanInput) => void;
@@ -119,13 +135,102 @@ function cloneInitialState(): CRMState {
   return structuredClone(initialCRMState);
 }
 
+function createCatalogSlug(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function normalizeCatalogName(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function sortPackageTemplates(templates: CRMState["packageTemplates"]) {
+  const kindOrder: Record<CreateWorkoutSessionInput["kind"], number> = {
+    solo: 0,
+    duo: 1,
+    group: 2,
+  };
+
+  return [...templates].sort((left, right) => {
+    const kindDelta = kindOrder[left.tier] - kindOrder[right.tier];
+    if (kindDelta !== 0) {
+      return kindDelta;
+    }
+
+    if (left.sessionCount !== right.sessionCount) {
+      return left.sessionCount - right.sessionCount;
+    }
+
+    if (left.price !== right.price) {
+      return left.price - right.price;
+    }
+
+    return left.name.localeCompare(right.name);
+  });
+}
+
+function sortTrainingLocations(trainingLocations: TrainingLocation[]) {
+  return [...trainingLocations].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function buildTrainingLocations(
+  existingLocations: TrainingLocation[] | undefined,
+  sessions: CRMState["sessions"],
+) {
+  const seen = new Set<string>();
+  const nextLocations: TrainingLocation[] = [];
+
+  const register = (name: string, id?: string) => {
+    const normalizedName = normalizeCatalogName(name);
+    if (!normalizedName) {
+      return;
+    }
+
+    const key = normalizedName.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    nextLocations.push({
+      id:
+        id?.trim() ||
+        `location-${createCatalogSlug(normalizedName) || crypto.randomUUID()}`,
+      name: normalizedName,
+    });
+  };
+
+  existingLocations?.forEach((location) => register(location.name, location.id));
+  sessions.forEach((session) => register(session.location));
+
+  return sortTrainingLocations(nextLocations);
+}
+
+function normalizeCRMState(state: CRMState) {
+  const baseState = cloneInitialState();
+  const mergedState = {
+    ...baseState,
+    ...state,
+  };
+
+  return {
+    ...mergedState,
+    trainingLocations: buildTrainingLocations(
+      (state as Partial<CRMState>).trainingLocations,
+      mergedState.sessions,
+    ),
+  };
+}
+
 function loadInitialState(firebaseConfigured: boolean): CRMState {
   if (typeof window === "undefined" || firebaseConfigured) {
     return cloneInitialState();
   }
 
   const rawState = localStorage.getItem(STATE_STORAGE_KEY);
-  return rawState ? (JSON.parse(rawState) as CRMState) : cloneInitialState();
+  return rawState ? normalizeCRMState(JSON.parse(rawState) as CRMState) : cloneInitialState();
 }
 
 function timestamp() {
@@ -376,7 +481,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         unsubscribeState = subscribeToCRMState(
           services.db,
           (nextState) => {
-            setState(nextState);
+            setState(normalizeCRMState(nextState));
             setCrmLoading(false);
             setCrmError(null);
           },
@@ -850,6 +955,286 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         });
       }
     },
+    createPackageTemplate: (input) => {
+      const snapshot = stateRef.current;
+      const normalizedName = normalizeCatalogName(input.name);
+      const sessionCount = Math.max(1, Math.round(input.sessionCount));
+      const maxParticipants = Math.max(1, Math.round(input.maxParticipants));
+      const durationMinutes = Math.max(15, Math.round(input.durationMinutes));
+      const price = clampAmount(input.price, Number.MAX_SAFE_INTEGER);
+
+      if (
+        !normalizedName ||
+        !Number.isFinite(sessionCount) ||
+        !Number.isFinite(maxParticipants) ||
+        !Number.isFinite(durationMinutes) ||
+        price <= 0
+      ) {
+        return { ok: false, reason: "invalid" };
+      }
+
+      if (
+        snapshot.packageTemplates.some(
+          (template) => template.name.toLowerCase() === normalizedName.toLowerCase(),
+        )
+      ) {
+        return { ok: false, reason: "duplicate" };
+      }
+
+      const nextTemplate = {
+        id: `pt-${crypto.randomUUID()}`,
+        name: normalizedName,
+        sessionCount,
+        tier: input.tier,
+        maxParticipants,
+        durationMinutes,
+        price,
+        currency: "EUR" as const,
+      };
+      const now = timestamp();
+
+      applyCRMUpdate((previous) => ({
+        ...previous,
+        packageTemplates: sortPackageTemplates([...previous.packageTemplates, nextTemplate]),
+        activityEvents: [
+          {
+            id: `act-${crypto.randomUUID()}`,
+            actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
+            type: "package-template.created",
+            detail: `Added ${nextTemplate.name} to the package catalog.`,
+            createdAt: now,
+          },
+          ...previous.activityEvents,
+        ],
+      }));
+
+      return { ok: true };
+    },
+    updatePackageTemplate: (templateId, input) => {
+      const snapshot = stateRef.current;
+      const existingTemplate = snapshot.packageTemplates.find((template) => template.id === templateId);
+      if (!existingTemplate) {
+        return { ok: false, reason: "not-found" };
+      }
+
+      const normalizedName = normalizeCatalogName(input.name);
+      const sessionCount = Math.max(1, Math.round(input.sessionCount));
+      const maxParticipants = Math.max(1, Math.round(input.maxParticipants));
+      const durationMinutes = Math.max(15, Math.round(input.durationMinutes));
+      const price = clampAmount(input.price, Number.MAX_SAFE_INTEGER);
+
+      if (
+        !normalizedName ||
+        !Number.isFinite(sessionCount) ||
+        !Number.isFinite(maxParticipants) ||
+        !Number.isFinite(durationMinutes) ||
+        price <= 0
+      ) {
+        return { ok: false, reason: "invalid" };
+      }
+
+      if (
+        snapshot.packageTemplates.some(
+          (template) =>
+            template.id !== templateId &&
+            template.name.toLowerCase() === normalizedName.toLowerCase(),
+        )
+      ) {
+        return { ok: false, reason: "duplicate" };
+      }
+
+      const now = timestamp();
+
+      applyCRMUpdate((previous) => ({
+        ...previous,
+        packageTemplates: sortPackageTemplates(
+          previous.packageTemplates.map((template) =>
+            template.id === templateId
+              ? {
+                  ...template,
+                  name: normalizedName,
+                  sessionCount,
+                  tier: input.tier,
+                  maxParticipants,
+                  durationMinutes,
+                  price,
+                }
+              : template,
+          ),
+        ),
+        activityEvents: [
+          {
+            id: `act-${crypto.randomUUID()}`,
+            actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
+            type: "package-template.updated",
+            detail: `Updated ${existingTemplate.name} in the package catalog.`,
+            createdAt: now,
+          },
+          ...previous.activityEvents,
+        ],
+      }));
+
+      return { ok: true };
+    },
+    deletePackageTemplate: (templateId) => {
+      const snapshot = stateRef.current;
+      const existingTemplate = snapshot.packageTemplates.find((template) => template.id === templateId);
+      if (!existingTemplate) {
+        return { ok: false, reason: "not-found" };
+      }
+
+      if (snapshot.packagePurchases.some((purchase) => purchase.templateId === templateId)) {
+        return { ok: false, reason: "in-use" };
+      }
+
+      const now = timestamp();
+
+      applyCRMUpdate((previous) => ({
+        ...previous,
+        packageTemplates: previous.packageTemplates.filter((template) => template.id !== templateId),
+        activityEvents: [
+          {
+            id: `act-${crypto.randomUUID()}`,
+            actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
+            type: "package-template.deleted",
+            detail: `Removed ${existingTemplate.name} from the package catalog.`,
+            createdAt: now,
+          },
+          ...previous.activityEvents,
+        ],
+      }));
+
+      return { ok: true };
+    },
+    createTrainingLocation: (input) => {
+      const snapshot = stateRef.current;
+      const normalizedName = normalizeCatalogName(input.name);
+
+      if (!normalizedName) {
+        return { ok: false, reason: "invalid" };
+      }
+
+      if (
+        snapshot.trainingLocations.some(
+          (location) => location.name.toLowerCase() === normalizedName.toLowerCase(),
+        )
+      ) {
+        return { ok: false, reason: "duplicate" };
+      }
+
+      const nextLocation = {
+        id: `location-${crypto.randomUUID()}`,
+        name: normalizedName,
+      };
+      const now = timestamp();
+
+      applyCRMUpdate((previous) => ({
+        ...previous,
+        trainingLocations: sortTrainingLocations([...previous.trainingLocations, nextLocation]),
+        activityEvents: [
+          {
+            id: `act-${crypto.randomUUID()}`,
+            actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
+            type: "location.created",
+            detail: `Added ${nextLocation.name} to the location catalog.`,
+            createdAt: now,
+          },
+          ...previous.activityEvents,
+        ],
+      }));
+
+      return { ok: true };
+    },
+    updateTrainingLocation: (locationId, input) => {
+      const snapshot = stateRef.current;
+      const existingLocation = snapshot.trainingLocations.find((location) => location.id === locationId);
+      if (!existingLocation) {
+        return { ok: false, reason: "not-found" };
+      }
+
+      const normalizedName = normalizeCatalogName(input.name);
+      if (!normalizedName) {
+        return { ok: false, reason: "invalid" };
+      }
+
+      if (
+        snapshot.trainingLocations.some(
+          (location) =>
+            location.id !== locationId &&
+            location.name.toLowerCase() === normalizedName.toLowerCase(),
+        )
+      ) {
+        return { ok: false, reason: "duplicate" };
+      }
+
+      const previousName = existingLocation.name;
+      const previousKey = previousName.toLowerCase();
+      const now = timestamp();
+
+      applyCRMUpdate((previous) => ({
+        ...previous,
+        trainingLocations: sortTrainingLocations(
+          previous.trainingLocations.map((location) =>
+            location.id === locationId ? { ...location, name: normalizedName } : location,
+          ),
+        ),
+        sessions: previous.sessions.map((session) =>
+          session.location.trim().toLowerCase() === previousKey
+            ? { ...session, location: normalizedName }
+            : session,
+        ),
+        activityEvents: [
+          {
+            id: `act-${crypto.randomUUID()}`,
+            actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
+            type: "location.updated",
+            detail: `Updated training location ${previousName}.`,
+            createdAt: now,
+          },
+          ...previous.activityEvents,
+        ],
+      }));
+
+      return { ok: true };
+    },
+    deleteTrainingLocation: (locationId) => {
+      const snapshot = stateRef.current;
+      const existingLocation = snapshot.trainingLocations.find((location) => location.id === locationId);
+      if (!existingLocation) {
+        return { ok: false, reason: "not-found" };
+      }
+
+      if (
+        snapshot.sessions.some(
+          (session) =>
+            normalizeCatalogName(session.location).toLowerCase() ===
+            existingLocation.name.toLowerCase(),
+        )
+      ) {
+        return { ok: false, reason: "in-use" };
+      }
+
+      const now = timestamp();
+
+      applyCRMUpdate((previous) => ({
+        ...previous,
+        trainingLocations: previous.trainingLocations.filter(
+          (location) => location.id !== locationId,
+        ),
+        activityEvents: [
+          {
+            id: `act-${crypto.randomUUID()}`,
+            actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
+            type: "location.deleted",
+            detail: `Removed ${existingLocation.name} from the location catalog.`,
+            createdAt: now,
+          },
+          ...previous.activityEvents,
+        ],
+      }));
+
+      return { ok: true };
+    },
     addPackagePurchase: (input) =>
       applyCRMUpdate((previous) => {
         const template = previous.packageTemplates.find((item) => item.id === input.templateId);
@@ -1041,6 +1426,10 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     addWorkoutSession: (input) =>
       applyCRMUpdate((previous) => {
         const exercises = normalizeWorkoutExercises(input.exercises);
+        const normalizedLocation =
+          normalizeCatalogName(input.location) ||
+          previous.trainingLocations[0]?.name ||
+          "Atlas Studio";
         if (!input.title.trim() || !input.startAt || !input.endAt || exercises.length === 0) {
           return previous;
         }
@@ -1107,9 +1496,22 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         };
         const reminderAt =
           input.status === "planned" ? subtractHours(input.startAt, 24) : undefined;
+        const hasLocation = previous.trainingLocations.some(
+          (location) => location.name.toLowerCase() === normalizedLocation.toLowerCase(),
+        );
+        const trainingLocations = hasLocation
+          ? previous.trainingLocations
+          : sortTrainingLocations([
+              ...previous.trainingLocations,
+              {
+                id: `location-${crypto.randomUUID()}`,
+                name: normalizedLocation,
+              },
+            ]);
 
         return {
           ...previous,
+          trainingLocations,
           sessions: [
             {
               id: sessionId,
@@ -1120,7 +1522,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
               kind: input.kind,
               startAt: input.startAt,
               endAt: input.endAt,
-              location: input.location.trim() || "Atlas Studio",
+              location: normalizedLocation,
               status: input.status,
               packagePurchaseId: input.packagePurchaseId,
               plannedWorkoutId,
