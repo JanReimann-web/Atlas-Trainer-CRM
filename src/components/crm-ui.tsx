@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth, useCRM, useLocaleContext } from "@/components/app-providers";
 import { getUpcomingSessions } from "@/lib/selectors";
 
@@ -31,6 +32,8 @@ export function InfoHint({ content }: { content: string }) {
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
   }, [open]);
+
+  const canUsePortal = typeof document !== "undefined";
 
   useEffect(() => {
     if (!open) {
@@ -119,30 +122,31 @@ export function InfoHint({ content }: { content: string }) {
         i
       </button>
 
-      {open ? (
-        <>
-          <div
-            ref={panelRef}
-            style={{
-              top: panelPosition.top,
-              left: panelPosition.left,
-              width: panelPosition.width,
-            }}
-            className="fixed z-[61] rounded-[26px] border border-[color:var(--line-soft)] bg-[color:var(--paper)] p-5 pr-12 text-sm leading-6 text-[color:var(--muted-ink)] shadow-[0_22px_60px_rgba(34,48,38,0.22)]"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              aria-label="Close help"
-              onClick={() => setOpen(false)}
-              className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--line-soft)] bg-white text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--sand-2)]"
+      {open && canUsePortal
+        ? createPortal(
+            <div
+              ref={panelRef}
+              style={{
+                top: panelPosition.top,
+                left: panelPosition.left,
+                width: panelPosition.width,
+              }}
+              className="fixed z-[999] rounded-[26px] border border-[color:var(--line-soft)] bg-[color:var(--paper)] p-5 pr-12 text-sm leading-6 text-[color:var(--muted-ink)] shadow-[0_22px_60px_rgba(34,48,38,0.22)]"
+              onClick={(event) => event.stopPropagation()}
             >
-              x
-            </button>
-            {content}
-          </div>
-        </>
-      ) : null}
+              <button
+                type="button"
+                aria-label="Close help"
+                onClick={() => setOpen(false)}
+                className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--line-soft)] bg-white text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--sand-2)]"
+              >
+                x
+              </button>
+              {content}
+            </div>,
+            document.body,
+          )
+        : null}
     </span>
   );
 }
