@@ -2,20 +2,61 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ReactNode, useMemo } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { useAuth, useCRM, useLocaleContext } from "@/components/app-providers";
 import { getUpcomingSessions } from "@/lib/selectors";
 
 export function InfoHint({ content }: { content: string }) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [open]);
+
   return (
-    <details className="relative inline-block">
-      <summary className="flex h-5 w-5 cursor-pointer list-none items-center justify-center rounded-full border border-[color:var(--line-soft)] bg-white/85 text-[11px] font-semibold text-[color:var(--ink)] shadow-sm transition hover:bg-[color:var(--sand-2)]">
+    <>
+      <button
+        type="button"
+        aria-label="Open help"
+        onClick={() => setOpen(true)}
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[color:var(--line-soft)] bg-white/85 text-[11px] font-semibold text-[color:var(--ink)] shadow-sm transition hover:bg-[color:var(--sand-2)]"
+      >
         i
-      </summary>
-      <div className="absolute left-0 top-7 z-20 w-64 rounded-2xl border border-[color:var(--line-soft)] bg-[color:var(--paper)] p-3 text-sm leading-6 text-[color:var(--muted-ink)] shadow-[0_18px_45px_rgba(34,48,38,0.18)]">
-        {content}
-      </div>
-    </details>
+      </button>
+
+      {open ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(25,31,26,0.24)] px-4 py-6"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-sm rounded-[26px] border border-[color:var(--line-soft)] bg-[color:var(--paper)] p-5 pr-12 text-sm leading-6 text-[color:var(--muted-ink)] shadow-[0_22px_60px_rgba(34,48,38,0.22)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              aria-label="Close help"
+              onClick={() => setOpen(false)}
+              className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--line-soft)] bg-white text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--sand-2)]"
+            >
+              x
+            </button>
+            {content}
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
