@@ -86,6 +86,7 @@ type CRMContextValue = {
   createClient: (input: CreateClientInput) => void;
   createClientFromLead: (leadId: string, input: CreateClientInput) => void;
   updateClient: (clientId: string, input: CreateClientInput) => void;
+  deleteLead: (leadId: string) => Promise<void>;
   deleteClient: (clientId: string) => Promise<void>;
   createPackageTemplate: (input: PackageTemplateInput) => CatalogMutationResult;
   updatePackageTemplate: (
@@ -576,6 +577,27 @@ function removeClientFromState(previous: CRMState, clientId: string): CRMState {
         draft.clientId !== clientId &&
         (!draft.sessionId || !deletedSessionIds.has(draft.sessionId)),
     ),
+  };
+}
+
+function removeLeadFromState(previous: CRMState, leadId: string): CRMState {
+  const lead = previous.leads.find((item) => item.id === leadId);
+  if (!lead) {
+    return previous;
+  }
+
+  const leadName = lead.fullName.trim().toLowerCase();
+
+  return {
+    ...previous,
+    leads: previous.leads.filter((item) => item.id !== leadId),
+    activityEvents: previous.activityEvents.filter((event) => {
+      if (event.type !== "lead.created") {
+        return true;
+      }
+
+      return !event.detail.toLowerCase().includes(leadName);
+    }),
   };
 }
 
@@ -1142,6 +1164,47 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           clientOverride: updatedClientSnapshot,
           trigger: "profile-update",
         });
+      }
+    },
+    deleteLead: async (leadId) => {
+      const previous = stateRef.current;
+      if (!previous.leads.some((item) => item.id === leadId)) {
+        return;
+      }
+
+      const next = removeLeadFromState(previous, leadId);
+      if (next === previous) {
+        return;
+      }
+
+      setCrmError(null);
+      stateRef.current = next;
+      setState(next);
+
+      if (firebaseConfigured && authUser) {
+        const services = getFirebaseServices();
+        if (services) {
+          try {
+            const persistPromise = saveQueueRef.current.then(() =>
+              saveCRMState(services.db, next, previous),
+            );
+            saveQueueRef.current = persistPromise.catch((error) => {
+              setCrmError(
+                error instanceof Error
+                  ? error.message
+                  : "Could not sync CRM state to Firebase.",
+              );
+            });
+            await persistPromise;
+          } catch (error) {
+            stateRef.current = previous;
+            setState(previous);
+            const message =
+              error instanceof Error ? error.message : "Lead deletion failed.";
+            setCrmError(message);
+            throw error;
+          }
+        }
       }
     },
     deleteClient: async (clientId) => {

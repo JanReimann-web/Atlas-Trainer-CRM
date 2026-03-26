@@ -26,12 +26,14 @@ const defaultLeadForm: CreateLeadInput = {
 const visibleLeadStatuses = ["new", "contacted", "trial-booked"] as const;
 
 export function LeadsScreen() {
-  const { state, createLead, updateLeadStatus } = useCRM();
+  const { state, createLead, updateLeadStatus, deleteLead } = useCRM();
   const { t, formatDate, locale } = useLocaleContext();
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [form, setForm] = useState<CreateLeadInput>(defaultLeadForm);
   const [formError, setFormError] = useState<string | null>(null);
+  const [leadActionError, setLeadActionError] = useState<string | null>(null);
+  const [deletingLeadId, setDeletingLeadId] = useState<string | null>(null);
   const deferredQuery = useDeferredValue(query);
   const activeLeads = useMemo(
     () => state.leads.filter((lead) => lead.status !== "converted"),
@@ -88,6 +90,26 @@ export function LeadsScreen() {
     });
 
     setForm(defaultLeadForm);
+  }
+
+  async function handleLeadDelete(leadId: string, leadName: string) {
+    const confirmed = window.confirm(`${t("leads.deleteConfirm")} ${leadName}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setLeadActionError(null);
+    setDeletingLeadId(leadId);
+
+    try {
+      await deleteLead(leadId);
+    } catch (error) {
+      setLeadActionError(
+        error instanceof Error ? error.message : t("leads.deleteFailed"),
+      );
+    } finally {
+      setDeletingLeadId(null);
+    }
   }
 
   return (
@@ -212,6 +234,11 @@ export function LeadsScreen() {
             />
           }
         >
+          {leadActionError ? (
+            <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+              {leadActionError}
+            </div>
+          ) : null}
           {filtered.length === 0 ? (
             <EmptyState title={t("common.none")} body={t("forms.noSearchResults")} />
           ) : (
@@ -248,7 +275,7 @@ export function LeadsScreen() {
                     <p>{formatDate(lead.lastContactAt)}</p>
                   </div>
                   <div className="mt-5 flex flex-wrap gap-3">
-                  <select
+                    <select
                       value={lead.status}
                       onChange={(event) =>
                         updateLeadStatus(lead.id, event.target.value as CreateLeadInput["status"])
@@ -279,6 +306,16 @@ export function LeadsScreen() {
                       className="rounded-full bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-300"
                     >
                       {lead.status === "converted" ? t("leads.converted") : t("leads.convert")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleLeadDelete(lead.id, lead.fullName)}
+                      disabled={deletingLeadId === lead.id}
+                      className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-900 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {deletingLeadId === lead.id
+                        ? t("leads.deleting")
+                        : t("common.delete")}
                     </button>
                   </div>
                 </div>
