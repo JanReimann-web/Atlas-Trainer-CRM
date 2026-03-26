@@ -2,12 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAuth, useCRM, useLocaleContext } from "@/components/app-providers";
 import { getUpcomingSessions } from "@/lib/selectors";
 
 export function InfoHint({ content }: { content: string }) {
   const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [panelPosition, setPanelPosition] = useState({
+    top: 16,
+    left: 16,
+    width: 320,
+  });
 
   useEffect(() => {
     if (!open) {
@@ -24,9 +31,58 @@ export function InfoHint({ content }: { content: string }) {
     return () => window.removeEventListener("keydown", handleEscape);
   }, [open]);
 
+  useLayoutEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function updatePosition() {
+      const button = buttonRef.current;
+      const panel = panelRef.current;
+      if (!button || !panel) {
+        return;
+      }
+
+      const viewportPadding = 16;
+      const gap = 10;
+      const buttonRect = button.getBoundingClientRect();
+      const nextWidth = Math.min(360, window.innerWidth - viewportPadding * 2);
+      const panelHeight = panel.getBoundingClientRect().height;
+      const centeredLeft = buttonRect.left + buttonRect.width / 2 - nextWidth / 2;
+      const left = Math.min(
+        Math.max(centeredLeft, viewportPadding),
+        window.innerWidth - nextWidth - viewportPadding,
+      );
+
+      const preferredBelowTop = buttonRect.bottom + gap;
+      const fitsBelow =
+        preferredBelowTop + panelHeight <= window.innerHeight - viewportPadding;
+      const preferredAboveTop = buttonRect.top - gap - panelHeight;
+      const top = fitsBelow
+        ? preferredBelowTop
+        : Math.max(viewportPadding, preferredAboveTop);
+
+      setPanelPosition({
+        top,
+        left,
+        width: nextWidth,
+      });
+    }
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
+
   return (
     <>
       <button
+        ref={buttonRef}
         type="button"
         aria-label="Open help"
         onClick={() => setOpen(true)}
@@ -36,12 +92,21 @@ export function InfoHint({ content }: { content: string }) {
       </button>
 
       {open ? (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(25,31,26,0.24)] px-4 py-6"
-          onClick={() => setOpen(false)}
-        >
+        <>
+          <button
+            type="button"
+            aria-label="Close help"
+            className="fixed inset-0 z-[60] bg-[rgba(25,31,26,0.24)]"
+            onClick={() => setOpen(false)}
+          />
           <div
-            className="relative w-full max-w-sm rounded-[26px] border border-[color:var(--line-soft)] bg-[color:var(--paper)] p-5 pr-12 text-sm leading-6 text-[color:var(--muted-ink)] shadow-[0_22px_60px_rgba(34,48,38,0.22)]"
+            ref={panelRef}
+            style={{
+              top: panelPosition.top,
+              left: panelPosition.left,
+              width: panelPosition.width,
+            }}
+            className="fixed z-[61] rounded-[26px] border border-[color:var(--line-soft)] bg-[color:var(--paper)] p-5 pr-12 text-sm leading-6 text-[color:var(--muted-ink)] shadow-[0_22px_60px_rgba(34,48,38,0.22)]"
             onClick={(event) => event.stopPropagation()}
           >
             <button
@@ -54,7 +119,7 @@ export function InfoHint({ content }: { content: string }) {
             </button>
             {content}
           </div>
-        </div>
+        </>
       ) : null}
     </>
   );
