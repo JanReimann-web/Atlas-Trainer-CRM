@@ -63,7 +63,7 @@ export function LeadsScreen() {
     event.preventDefault();
     setFormError(null);
 
-    if (!form.fullName.trim() || !form.email.trim() || !form.goal.trim()) {
+    if (!form.fullName.trim() || !form.email.trim()) {
       setFormError(t("forms.requiredError"));
       return;
     }
@@ -179,15 +179,6 @@ export function LeadsScreen() {
               </DataLabel>
             </div>
 
-            <DataLabel label={t("fields.goal")}>
-              <textarea
-                value={form.goal}
-                onChange={(event) => updateField("goal", event.target.value)}
-                rows={3}
-                className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/85 px-4 py-3 text-sm leading-6 outline-none"
-              />
-            </DataLabel>
-
             {formError ? (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
                 {formError}
@@ -245,10 +236,12 @@ export function LeadsScreen() {
                       <span className="font-semibold text-[color:var(--ink)]">{t("leads.source")}:</span>{" "}
                       {lead.source}
                     </p>
-                    <p>
-                      <span className="font-semibold text-[color:var(--ink)]">{t("leads.goal")}:</span>{" "}
-                      {lead.goal}
-                    </p>
+                    {lead.goal ? (
+                      <p>
+                        <span className="font-semibold text-[color:var(--ink)]">{t("leads.goal")}:</span>{" "}
+                        {lead.goal}
+                      </p>
+                    ) : null}
                     {lead.nextStep ? (
                       <p>
                         <span className="font-semibold text-[color:var(--ink)]">{t("leads.nextStep")}:</span>{" "}
