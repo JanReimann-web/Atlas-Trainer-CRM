@@ -182,13 +182,13 @@ export function SettingsScreen({
                 key={service.name}
                 className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
                     <p className="font-semibold text-[color:var(--ink)]">{service.name}</p>
                     <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">
                       {t(integrationDetailKey[service.name] ?? service.detail)}
                     </p>
-                    <p className="mt-2 text-xs uppercase tracking-[0.18em] text-[color:var(--muted-ink)]">
+                    <p className="mt-2 break-all text-[10px] uppercase tracking-[0.12em] text-[color:var(--muted-ink)] sm:text-xs sm:tracking-[0.18em]">
                       {service.envKeys.join(" / ")}
                     </p>
                   </div>

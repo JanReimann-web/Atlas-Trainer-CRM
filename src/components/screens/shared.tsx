@@ -16,7 +16,7 @@ export function PageLead({
       <p className="text-xs uppercase tracking-[0.32em] text-[color:var(--muted-ink)]">
         {eyebrow}
       </p>
-      <h1 className="break-words font-display text-[clamp(2.7rem,11vw,3.65rem)] leading-[0.92] text-[color:var(--ink)] sm:text-5xl">
+      <h1 className="font-display text-[clamp(1.7rem,7.5vw,3.65rem)] leading-[0.96] tracking-[-0.03em] [text-wrap:balance] text-[color:var(--ink)] sm:text-5xl sm:tracking-normal">
         {title}
       </h1>
       {subtitle ? (
