@@ -188,24 +188,6 @@ export function LeadsScreen() {
               />
             </DataLabel>
 
-            <DataLabel label={t("fields.nextStep")}>
-              <textarea
-                value={form.nextStep}
-                onChange={(event) => updateField("nextStep", event.target.value)}
-                rows={2}
-                className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/85 px-4 py-3 text-sm leading-6 outline-none"
-              />
-            </DataLabel>
-
-            <DataLabel label={t("fields.notes")}>
-              <textarea
-                value={form.notes}
-                onChange={(event) => updateField("notes", event.target.value)}
-                rows={4}
-                className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/85 px-4 py-3 text-sm leading-6 outline-none"
-              />
-            </DataLabel>
-
             {formError ? (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
                 {formError}
@@ -267,10 +249,12 @@ export function LeadsScreen() {
                       <span className="font-semibold text-[color:var(--ink)]">{t("leads.goal")}:</span>{" "}
                       {lead.goal}
                     </p>
-                    <p>
-                      <span className="font-semibold text-[color:var(--ink)]">{t("leads.nextStep")}:</span>{" "}
-                      {lead.nextStep}
-                    </p>
+                    {lead.nextStep ? (
+                      <p>
+                        <span className="font-semibold text-[color:var(--ink)]">{t("leads.nextStep")}:</span>{" "}
+                        {lead.nextStep}
+                      </p>
+                    ) : null}
                     <p>{formatDate(lead.lastContactAt)}</p>
                   </div>
                   <div className="mt-5 flex flex-wrap items-center gap-3">
