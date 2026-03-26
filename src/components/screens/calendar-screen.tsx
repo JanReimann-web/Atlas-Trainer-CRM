@@ -122,7 +122,7 @@ export function CalendarScreen() {
 
   return (
     <div className="space-y-6">
-      <PageLead eyebrow={t("nav.calendar")} title={t("calendar.title")} subtitle={t("calendar.subtitle")} />
+      <PageLead eyebrow={t("nav.calendar")} title={t("calendar.title")} />
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <SectionCard title={t("nav.calendar")} help={t("help.calendar")}>

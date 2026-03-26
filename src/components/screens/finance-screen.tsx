@@ -21,7 +21,7 @@ export function FinanceScreen() {
 
   return (
     <div className="space-y-6">
-      <PageLead eyebrow={t("nav.finance")} title={t("finance.title")} subtitle={t("finance.subtitle")} />
+      <PageLead eyebrow={t("nav.finance")} title={t("finance.title")} />
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard

@@ -87,15 +87,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="panel-surface w-full rounded-[36px] p-8 text-center">
-            <p className="text-xs uppercase tracking-[0.3em] text-[color:var(--muted-ink)]">
-              {t("auth.connecting")}
-            </p>
             <h1 className="mt-4 font-display text-4xl text-[color:var(--ink)]">
               {t("auth.loadingTitle")}
             </h1>
-            <p className="mt-4 text-sm leading-7 text-[color:var(--muted-ink)]">
-              {user ? t("auth.syncingWorkspace") : t("auth.loadingSubtitle")}
-            </p>
           </div>
         </div>
       </div>
@@ -112,9 +106,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="panel-surface w-full rounded-[36px] p-8 text-center">
-            <p className="text-xs uppercase tracking-[0.3em] text-[color:var(--muted-ink)]">
-              {t("common.firebaseConnected")}
-            </p>
             <h1 className="mt-4 font-display text-4xl text-[color:var(--ink)]">
               {t("auth.loadingTitle")}
             </h1>
@@ -149,9 +140,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
               <h1 className="mt-4 font-display text-[clamp(3rem,9vw,5.4rem)] leading-[0.92] text-[color:var(--ink)]">
                 {t("auth.title")}
               </h1>
-              <p className="mt-4 max-w-xl text-sm leading-7 text-[color:var(--muted-ink)]">
-                {t("auth.subtitle")}
-              </p>
             </section>
 
             <section className="rounded-[28px] border border-[color:var(--line-soft)] bg-white/70 p-5 sm:p-8 lg:rounded-[32px]">
