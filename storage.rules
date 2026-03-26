@@ -1,0 +1,31 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Keep this list in sync with src/lib/auth/allowed-emails.ts.
+    function isAuthorizedCoach() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && (
+          request.auth.token.email == "jaanes79@gmail.com"
+          || request.auth.token.email == "trennikas@gmail.com"
+        );
+    }
+
+    function isSafeWorkspaceUpload() {
+      return request.resource == null
+        || request.resource.size < 25 * 1024 * 1024;
+    }
+
+    // The app initializes Storage but does not yet upload files.
+    // Reserve access for workspace-scoped files only.
+    match /workspaces/{workspaceId}/{allPaths=**} {
+      allow read: if isAuthorizedCoach();
+      allow write: if isAuthorizedCoach() && isSafeWorkspaceUpload();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

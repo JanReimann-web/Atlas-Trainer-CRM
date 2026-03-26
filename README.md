@@ -51,7 +51,14 @@ OPENAI_MODEL=
 - Enable `Email/Password` in Firebase Authentication.
 - Create a Firestore database before signing in.
 - The app seeds the shared workspace automatically on first login if Firestore is empty.
-- If your Firestore rules are no longer in test mode, allow authenticated users to read and write the workspace data used by the app.
+- `firestore.rules` and `storage.rules` are included in the repo root and assume the same allowed coach emails as `src/lib/auth/allowed-emails.ts`.
+- Firestore access is limited to authenticated allowed coaches and the workspace/state documents used by the app.
+- Storage access is limited to authenticated allowed coaches under `workspaces/{workspaceId}/...`.
+- Deploy the rules with:
+
+```bash
+firebase deploy --only firestore:rules,storage
+```
 
 ## Main routes
 
@@ -62,7 +69,6 @@ OPENAI_MODEL=
 - `/clients/[clientId]/sessions/[sessionId]`
 - `/calendar`
 - `/plans`
-- `/communications`
 - `/finance`
 - `/settings`
 - `/activity`

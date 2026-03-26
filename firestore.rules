@@ -1,0 +1,76 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Keep this list in sync with src/lib/auth/allowed-emails.ts.
+    function isAuthorizedCoach() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && (
+          request.auth.token.email == "jaanes79@gmail.com"
+          || request.auth.token.email == "trennikas@gmail.com"
+        );
+    }
+
+    function isWorkspaceMetadataWrite() {
+      return request.resource.data.keys().hasOnly([
+          "seededAt",
+          "updatedAt",
+          "version",
+        ])
+        && request.resource.data.version == 1;
+    }
+
+    function isStateSliceId(sliceId) {
+      return sliceId == "users"
+        || sliceId == "leads"
+        || sliceId == "clients"
+        || sliceId == "packageTemplates"
+        || sliceId == "trainingLocations"
+        || sliceId == "packagePurchases"
+        || sliceId == "sessions"
+        || sliceId == "plannedWorkouts"
+        || sliceId == "sessionWorkouts"
+        || sliceId == "bodyAssessments"
+        || sliceId == "workoutPlans"
+        || sliceId == "nutritionPlans"
+        || sliceId == "exerciseLibrary"
+        || sliceId == "emailThreads"
+        || sliceId == "emailMessages"
+        || sliceId == "reminders"
+        || sliceId == "invoiceRecords"
+        || sliceId == "paymentRecords"
+        || sliceId == "activityEvents"
+        || sliceId == "aiDrafts";
+    }
+
+    function isStateSliceWrite() {
+      return request.resource.data.keys().hasOnly([
+          "items",
+          "updatedAt",
+          "version",
+        ])
+        && request.resource.data.version == 1
+        && "items" in request.resource.data
+        && "updatedAt" in request.resource.data;
+    }
+
+    match /workspaces/{workspaceId} {
+      allow get: if isAuthorizedCoach();
+      allow create, update: if isAuthorizedCoach() && isWorkspaceMetadataWrite();
+      allow delete: if false;
+
+      match /state/{sliceId} {
+        allow read: if isAuthorizedCoach() && isStateSliceId(sliceId);
+        allow create, update: if isAuthorizedCoach()
+          && isStateSliceId(sliceId)
+          && isStateSliceWrite();
+        allow delete: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
