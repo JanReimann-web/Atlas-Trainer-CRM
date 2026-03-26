@@ -11,8 +11,10 @@ import {
 } from "react";
 import {
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
   User as FirebaseAuthUser,
 } from "firebase/auth";
@@ -72,6 +74,7 @@ type AuthContextValue = {
   firebaseConfigured: boolean;
   liveData: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signOutUser: () => Promise<void>;
 };
@@ -383,6 +386,14 @@ function formatAuthError(locale: Locale, error: unknown) {
 
   if (message.includes("auth/weak-password")) {
     return translate(locale, "auth.passwordHint");
+  }
+
+  if (message.includes("auth/popup-closed-by-user")) {
+    return translate(locale, "auth.popupClosed");
+  }
+
+  if (message.includes("auth/cancelled-popup-request")) {
+    return translate(locale, "auth.popupClosed");
   }
 
   return message;
@@ -783,6 +794,30 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
       try {
         await signInWithEmailAndPassword(services.auth, normalizedEmail, password);
+      } catch (error) {
+        setAuthLoading(false);
+        setAuthError(formatAuthError(locale, error));
+      }
+    },
+    signInWithGoogle: async () => {
+      const services = getFirebaseServices();
+      if (!services) {
+        return;
+      }
+
+      setAuthError(null);
+      setAuthLoading(true);
+
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+
+      try {
+        const result = await signInWithPopup(services.auth, provider);
+        if (!isAllowedEmail(result.user.email)) {
+          await signOut(services.auth);
+          setAuthLoading(false);
+          setAuthError(translate(locale, "auth.restrictedAccess"));
+        }
       } catch (error) {
         setAuthLoading(false);
         setAuthError(formatAuthError(locale, error));

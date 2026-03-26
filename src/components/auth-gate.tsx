@@ -7,8 +7,32 @@ import { isAllowedEmail, normalizeEmail } from "@/lib/auth/allowed-emails";
 
 type AuthMode = "signin" | "signup";
 
+function GoogleLogo() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24">
+      <path
+        d="M21.8 12.23c0-.76-.07-1.49-.19-2.2H12v4.16h5.49a4.7 4.7 0 0 1-2.04 3.08v2.56h3.3c1.93-1.78 3.05-4.4 3.05-7.6Z"
+        fill="#4285F4"
+      />
+      <path
+        d="M12 22c2.76 0 5.08-.91 6.77-2.46l-3.3-2.56c-.91.61-2.08.97-3.47.97-2.67 0-4.94-1.8-5.75-4.23H2.84v2.64A10 10 0 0 0 12 22Z"
+        fill="#34A853"
+      />
+      <path
+        d="M6.25 13.72A5.98 5.98 0 0 1 5.93 12c0-.6.11-1.18.32-1.72V7.64H2.84A10 10 0 0 0 2 12c0 1.61.39 3.13 1.08 4.36l3.17-2.64Z"
+        fill="#FBBC05"
+      />
+      <path
+        d="M12 6.05c1.5 0 2.85.52 3.91 1.53l2.93-2.93C17.07 2.98 14.75 2 12 2A10 10 0 0 0 3.08 7.64l3.17 2.64c.81-2.43 3.08-4.23 5.75-4.23Z"
+        fill="#EA4335"
+      />
+    </svg>
+  );
+}
+
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { user, loading, error, firebaseConfigured, signIn, signUp } = useAuth();
+  const { user, loading, error, firebaseConfigured, signIn, signInWithGoogle, signUp } =
+    useAuth();
   const { error: crmError, hydrated } = useCRM();
   const { t } = useLocaleContext();
   const [mode, setMode] = useState<AuthMode>("signin");
@@ -185,6 +209,23 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
                   {submitLabel}
                 </button>
               </form>
+
+              <div className="mt-5">
+                <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.24em] text-[color:var(--muted-ink)]">
+                  <span className="h-px flex-1 bg-[color:var(--line-soft)]" />
+                  <span>{t("auth.orContinueWith")}</span>
+                  <span className="h-px flex-1 bg-[color:var(--line-soft)]" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => void signInWithGoogle()}
+                  className="mt-4 flex w-full items-center justify-center gap-3 rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm font-semibold text-[color:var(--ink)] shadow-[0_12px_30px_rgba(34,48,38,0.08)] transition hover:translate-y-[-1px] hover:bg-[color:var(--sand-2)]"
+                >
+                  <GoogleLogo />
+                  <span>{t("auth.googleContinue")}</span>
+                </button>
+              </div>
             </section>
           </div>
         </div>

@@ -148,6 +148,9 @@ const messages: Record<Locale, DictionaryTree> = {
       syncingWorkspace: "Your account is ready. Syncing the latest CRM data from Firestore.",
       fillAllFields: "Fill in both email and password.",
       passwordHint: "Password must be at least 6 characters.",
+      popupClosed: "Google sign-in was cancelled before completion.",
+      orContinueWith: "or",
+      googleContinue: "Continue with Google",
       restrictedAccess:
         "This CRM is restricted to approved accounts only. Use one of the allowed coach email addresses.",
       invalidCredentials: "Email or password is incorrect.",
@@ -624,6 +627,9 @@ const messages: Record<Locale, DictionaryTree> = {
       syncingWorkspace: "Konto on valmis. Sünkroniseerin Firestore'ist viimased CRM-i andmed.",
       fillAllFields: "Täida nii e-post kui ka parool.",
       passwordHint: "Parool peab olema vähemalt 6 tähemärki pikk.",
+      popupClosed: "Google'iga sisselogimine katkestati enne lõpetamist.",
+      orContinueWith: "või",
+      googleContinue: "Jätka Google'iga",
       restrictedAccess:
         "See CRM on piiratud ainult kinnitatud kasutajatele. Kasuta ühte lubatud treeneri e-posti aadressidest.",
       invalidCredentials: "E-post või parool on vale.",
