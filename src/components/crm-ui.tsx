@@ -239,7 +239,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </aside>
 
-        <div className="space-y-6">
+        <div className="space-y-6 pb-[calc(env(safe-area-inset-bottom)+6.5rem)] lg:pb-0">
           <header className="panel-surface rounded-[32px] px-5 py-4">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
