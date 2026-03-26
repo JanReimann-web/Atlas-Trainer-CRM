@@ -184,7 +184,7 @@ export function LanguageToggle({
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { state, persistenceMode } = useCRM();
+  const { state, persistenceMode, error } = useCRM();
   const { user, liveData, firebaseConfigured, signOutUser } = useAuth();
   const { t, formatDate } = useLocaleContext();
   const nextSession = useMemo(() => getUpcomingSessions(state, 1)[0], [state]);
@@ -289,6 +289,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                       ? t("common.firebaseConnectedDetail")
                       : t("common.integrationFallbackDetail")}
                   </p>
+                  {error && persistenceMode === "firebase" ? (
+                    <p className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-900">
+                      {error}
+                    </p>
+                  ) : null}
                   {firebaseConfigured && persistenceMode === "firebase" ? (
                     <button
                       type="button"

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { useAuth, useLocaleContext } from "@/components/app-providers";
+import { useAuth, useCRM, useLocaleContext } from "@/components/app-providers";
 import { LanguageToggle } from "@/components/crm-ui";
 import { isAllowedEmail, normalizeEmail } from "@/lib/auth/allowed-emails";
 
@@ -9,6 +9,7 @@ type AuthMode = "signin" | "signup";
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading, error, firebaseConfigured, signIn, signUp } = useAuth();
+  const { error: crmError, hydrated } = useCRM();
   const { t } = useLocaleContext();
   const [mode, setMode] = useState<AuthMode>("signin");
   const [email, setEmail] = useState("");
@@ -71,6 +72,31 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             <p className="mt-4 text-sm leading-7 text-[color:var(--muted-ink)]">
               {user ? t("auth.syncingWorkspace") : t("auth.loadingSubtitle")}
             </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (firebaseConfigured && user && !hydrated && crmError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[color:var(--background)] px-4 py-8">
+        <div className="w-full max-w-lg space-y-4">
+          <div className="flex justify-end">
+            <div className="w-36">
+              <LanguageToggle compact />
+            </div>
+          </div>
+          <div className="panel-surface w-full rounded-[36px] p-8 text-center">
+            <p className="text-xs uppercase tracking-[0.3em] text-[color:var(--muted-ink)]">
+              {t("common.firebaseConnected")}
+            </p>
+            <h1 className="mt-4 font-display text-4xl text-[color:var(--ink)]">
+              {t("auth.loadingTitle")}
+            </h1>
+            <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm leading-7 text-rose-900">
+              {crmError}
+            </div>
           </div>
         </div>
       </div>

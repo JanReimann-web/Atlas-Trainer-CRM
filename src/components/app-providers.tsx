@@ -79,6 +79,7 @@ type AuthContextValue = {
 type CRMContextValue = {
   state: CRMState;
   loading: boolean;
+  hydrated: boolean;
   error: string | null;
   persistenceMode: "local" | "firebase";
   createLead: (input: CreateLeadInput) => void;
@@ -593,6 +594,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
   const [state, setState] = useState<CRMState>(() => loadInitialState(firebaseConfigured));
   const [crmLoading, setCrmLoading] = useState(firebaseConfigured);
+  const [crmHydrated, setCrmHydrated] = useState(!firebaseConfigured);
   const [crmError, setCrmError] = useState<string | null>(null);
   const saveQueueRef = useRef(Promise.resolve());
   const stateRef = useRef(state);
@@ -638,6 +640,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           setAuthError(translate(locale, "auth.restrictedAccess"));
           setAuthUser(null);
           setState(cloneInitialState());
+          setCrmHydrated(false);
           setCrmError(null);
           setCrmLoading(false);
           setAuthLoading(false);
@@ -653,20 +656,24 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
         if (!nextUser) {
           setState(cloneInitialState());
+          setCrmHydrated(false);
           setCrmError(null);
           setCrmLoading(false);
           return;
         }
 
+        setCrmHydrated(false);
         setCrmLoading(true);
         unsubscribeState = subscribeToCRMState(
           services.db,
           (nextState) => {
             setState(normalizeCRMState(nextState));
+            setCrmHydrated(true);
             setCrmLoading(false);
             setCrmError(null);
           },
           (error) => {
+            setCrmHydrated(false);
             setCrmLoading(false);
             setCrmError(error.message);
           },
@@ -911,6 +918,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   const crmValue: CRMContextValue = {
     state,
     loading: authLoading || crmLoading,
+    hydrated: crmHydrated,
     error: crmError,
     persistenceMode: firebaseConfigured ? "firebase" : "local",
     createLead: (input) =>
