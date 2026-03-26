@@ -21,6 +21,7 @@ export type DraftStatus = "draft" | "reviewed" | "sent";
 export type CalendarSyncState = "synced" | "pending" | "manual";
 export type ReminderStatus = "scheduled" | "sent" | "done";
 export type CatalogMutationReason = "duplicate" | "in-use" | "invalid" | "not-found";
+export type PaymentMethod = "card" | "cash";
 export type SessionExerciseStatus =
   | "planned"
   | "completed"
@@ -157,6 +158,7 @@ export interface CreatePackagePurchaseInput {
   expiresAt: string;
   paymentStatus: PaymentStatus;
   amountPaid: number;
+  paymentMethod: PaymentMethod;
   notes?: string;
 }
 
@@ -399,7 +401,7 @@ export interface PaymentRecord {
   paidAt: string;
   amount: number;
   currency: Currency;
-  method: string;
+  method: PaymentMethod;
 }
 
 export interface ActivityEvent {

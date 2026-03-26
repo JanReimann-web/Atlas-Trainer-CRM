@@ -1080,7 +1080,7 @@ export const initialCRMState: CRMState = {
       paidAt: "2026-03-02T10:00:00.000Z",
       amount: 315,
       currency: "EUR",
-      method: "bank transfer",
+      method: "card",
     },
     {
       id: "pay-marko-1",
@@ -1098,7 +1098,7 @@ export const initialCRMState: CRMState = {
       paidAt: "2026-02-21T08:00:00.000Z",
       amount: 168,
       currency: "EUR",
-      method: "bank transfer",
+      method: "cash",
     },
   ],
   activityEvents: [

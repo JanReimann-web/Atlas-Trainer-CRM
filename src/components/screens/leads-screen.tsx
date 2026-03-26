@@ -27,7 +27,7 @@ const visibleLeadStatuses = ["new", "contacted", "trial-booked"] as const;
 
 export function LeadsScreen() {
   const { state, createLead, updateLeadStatus } = useCRM();
-  const { t, formatDate } = useLocaleContext();
+  const { t, formatDate, locale } = useLocaleContext();
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [form, setForm] = useState<CreateLeadInput>(defaultLeadForm);
@@ -83,6 +83,7 @@ export function LeadsScreen() {
       source: form.source.trim(),
       goal: form.goal.trim(),
       nextStep: form.nextStep.trim(),
+      preferredLanguage: locale,
       notes: form.notes.trim(),
     });
 
@@ -140,7 +141,7 @@ export function LeadsScreen() {
               </DataLabel>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-1">
               <DataLabel label={t("fields.status")}>
                 <select
                   value={form.status}
@@ -152,18 +153,6 @@ export function LeadsScreen() {
                       {t(`status.${status}`)}
                     </option>
                   ))}
-                </select>
-              </DataLabel>
-              <DataLabel label={t("fields.preferredLanguage")}>
-                <select
-                  value={form.preferredLanguage}
-                  onChange={(event) =>
-                    updateField("preferredLanguage", event.target.value as CreateLeadInput["preferredLanguage"])
-                  }
-                  className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/85 px-4 py-3 text-sm outline-none"
-                >
-                  <option value="en">EN</option>
-                  <option value="et">ET</option>
                 </select>
               </DataLabel>
             </div>
@@ -280,7 +269,6 @@ export function LeadsScreen() {
                           fullName: lead.fullName,
                           email: lead.email,
                           phone: lead.phone,
-                          preferredLanguage: lead.preferredLanguage,
                           goal: lead.goal,
                           tagsText: "new-client",
                           notes: lead.notes,
@@ -292,9 +280,6 @@ export function LeadsScreen() {
                     >
                       {lead.status === "converted" ? t("leads.converted") : t("leads.convert")}
                     </button>
-                    <span className="rounded-full bg-[color:var(--sand-2)] px-4 py-2 text-sm text-[color:var(--muted-ink)]">
-                      {lead.preferredLanguage.toUpperCase()}
-                    </span>
                   </div>
                 </div>
               ))}

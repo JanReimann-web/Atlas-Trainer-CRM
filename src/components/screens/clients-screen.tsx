@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useDeferredValue, useMemo, useState } from "react";
 import { useCRM, useLocaleContext } from "@/components/app-providers";
-import { DataLabel, EmptyState, SectionCard, StatusBadge } from "@/components/crm-ui";
+import { DataLabel, EmptyState, SectionCard } from "@/components/crm-ui";
 import {
   getClientPurchases,
   getClientUpcomingSession,
@@ -19,10 +19,8 @@ const defaultClientForm = {
   email: "",
   phone: "",
   gender: "unspecified",
-  preferredLanguage: "en",
   goalsText: "",
   tagsText: "",
-  consentStatus: "pending",
   notes: "",
   healthFlagsText: "",
 };
@@ -52,7 +50,7 @@ function parseHealthFlags(value: string): HealthFlag[] {
 
 export function ClientsScreen() {
   const { state, createClient, createClientFromLead } = useCRM();
-  const { t, formatDate } = useLocaleContext();
+  const { t, formatDate, locale } = useLocaleContext();
   const searchParams = useSearchParams();
   const fromLeadId = searchParams.get("fromLead");
   const [query, setQuery] = useState("");
@@ -61,8 +59,6 @@ export function ClientsScreen() {
     fullName: searchParams.get("fullName") ?? "",
     email: searchParams.get("email") ?? "",
     phone: searchParams.get("phone") ?? "",
-    preferredLanguage:
-      searchParams.get("preferredLanguage") === "et" ? "et" : defaultClientForm.preferredLanguage,
     goalsText: searchParams.get("goal") ?? "",
     tagsText: searchParams.get("tagsText") ?? "",
     notes: searchParams.get("notes") ?? "",
@@ -119,10 +115,11 @@ export function ClientsScreen() {
       email,
       phone: form.phone.trim(),
       gender: form.gender,
-      preferredLanguage: form.preferredLanguage as CreateClientInput["preferredLanguage"],
+      preferredLanguage:
+        fromLead?.preferredLanguage ?? (locale as CreateClientInput["preferredLanguage"]),
       goals: splitCsv(form.goalsText),
       tags: splitCsv(form.tagsText),
-      consentStatus: form.consentStatus as CreateClientInput["consentStatus"],
+      consentStatus: "signed",
       notes: form.notes.trim(),
       healthFlags: parseHealthFlags(form.healthFlagsText),
     };
@@ -174,32 +171,6 @@ export function ClientsScreen() {
                   onChange={(event) => updateField("gender", event.target.value)}
                   className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/85 px-4 py-3 text-sm outline-none"
                 />
-              </DataLabel>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <DataLabel label={t("fields.preferredLanguage")}>
-                <select
-                  value={form.preferredLanguage}
-                  onChange={(event) => updateField("preferredLanguage", event.target.value)}
-                  className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/85 px-4 py-3 text-sm outline-none"
-                >
-                  <option value="en">EN</option>
-                  <option value="et">ET</option>
-                </select>
-              </DataLabel>
-              <DataLabel label={t("fields.consentStatus")}>
-                <select
-                  value={form.consentStatus}
-                  onChange={(event) => updateField("consentStatus", event.target.value)}
-                  className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/85 px-4 py-3 text-sm outline-none"
-                >
-                  {(["pending", "signed", "declined"] as const).map((status) => (
-                    <option key={status} value={status}>
-                      {t(`status.${status}`)}
-                    </option>
-                  ))}
-                </select>
               </DataLabel>
             </div>
 
@@ -302,7 +273,6 @@ export function ClientsScreen() {
                           </p>
                         </div>
                       </div>
-                      <StatusBadge status={client.consentStatus} />
                     </div>
 
                     <div className="mt-5 grid gap-3 text-sm leading-6 text-[color:var(--muted-ink)]">

@@ -5,6 +5,7 @@ import { SectionCard, StatCard } from "@/components/crm-ui";
 import {
   getClient,
   getMonthlyRevenue,
+  getMonthlyRevenueByMethod,
   getOutstandingRevenue,
   getPackageLiability,
   getRemainingUnits,
@@ -15,6 +16,8 @@ export function FinanceScreen() {
   const { state } = useCRM();
   const { t, formatCurrency, formatDate } = useLocaleContext();
   const expiring = state.packagePurchases.filter((purchase) => purchase.expiresAt.startsWith("2026-04"));
+  const cardRevenue = getMonthlyRevenueByMethod(state, "card");
+  const cashRevenue = getMonthlyRevenueByMethod(state, "cash");
 
   return (
     <div className="space-y-6">
@@ -61,6 +64,21 @@ export function FinanceScreen() {
         </SectionCard>
 
         <div className="grid gap-6">
+          <SectionCard title={t("finance.paymentBreakdown")}>
+            <div className="grid gap-3">
+              <TimelineItem
+                title={t("finance.cardPayments")}
+                detail={t("finance.cardPaymentsDetail")}
+                meta={formatCurrency(cardRevenue)}
+              />
+              <TimelineItem
+                title={t("finance.cashPayments")}
+                detail={t("finance.cashPaymentsDetail")}
+                meta={formatCurrency(cashRevenue)}
+              />
+            </div>
+          </SectionCard>
+
           <SectionCard title={t("finance.expiring")}>
             <div className="space-y-3">
               {expiring.map((purchase) => {

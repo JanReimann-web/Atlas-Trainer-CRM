@@ -14,6 +14,7 @@ import {
   getMonthlyRevenue,
   getOutstandingRevenue,
   getPackageLiability,
+  getRemainingUnits,
   getSessionsToday,
   getUpcomingSessions,
 } from "@/lib/selectors";
@@ -28,6 +29,11 @@ export function DashboardScreen() {
   const monthlyRevenue = getMonthlyRevenue(state);
   const outstanding = getOutstandingRevenue(state);
   const liability = getPackageLiability(state);
+  const clientsWithActivePackages = new Set(
+    state.packagePurchases
+      .filter((purchase) => getRemainingUnits(purchase) > 0)
+      .map((purchase) => purchase.clientId),
+  ).size;
   const upcomingSessions = getUpcomingSessions(state, 4);
   const aiQueue = useMemo(
     () => state.aiDrafts.filter((draft) => draft.status !== "sent").slice(0, 4),
@@ -45,7 +51,7 @@ export function DashboardScreen() {
         <StatCard
           label={t("dashboard.activeClients")}
           value={String(activeClients)}
-          detail={`${state.clients.filter((client) => client.consentStatus === "signed").length} ${t("dashboard.activeClientsDetail")}`}
+          detail={`${clientsWithActivePackages} ${t("dashboard.activeClientsDetail")}`}
         />
         <StatCard
           label={t("dashboard.openLeads")}

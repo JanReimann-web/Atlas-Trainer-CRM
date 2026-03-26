@@ -124,6 +124,16 @@ export function getMonthlyRevenue(state: CRMState, monthPrefix = "2026-03") {
     .reduce((sum, payment) => sum + payment.amount, 0);
 }
 
+export function getMonthlyRevenueByMethod(
+  state: CRMState,
+  method: CRMState["paymentRecords"][number]["method"],
+  monthPrefix = "2026-03",
+) {
+  return state.paymentRecords
+    .filter((payment) => payment.paidAt.startsWith(monthPrefix) && payment.method === method)
+    .reduce((sum, payment) => sum + payment.amount, 0);
+}
+
 export function getOutstandingRevenue(state: CRMState) {
   return state.invoiceRecords.reduce((sum, invoice) => {
     const paid = state.paymentRecords

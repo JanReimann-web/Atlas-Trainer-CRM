@@ -28,9 +28,10 @@ import {
   CreateBodyAssessmentInput,
   CreateClientInput,
   CreatePackagePurchaseInput,
-  CreateWorkoutPlanInput,
   CreateWorkoutSessionInput,
   HealthFlag,
+  PaymentMethod,
+  PaymentStatus,
 } from "@/lib/types";
 import { PageLead } from "@/components/screens/shared";
 
@@ -49,10 +50,8 @@ const defaultClientProfileForm = {
   email: "",
   phone: "",
   gender: "unspecified",
-  preferredLanguage: "en",
   goalsText: "",
   tagsText: "",
-  consentStatus: "pending",
   notes: "",
   healthFlagsText: "",
 };
@@ -75,16 +74,27 @@ type WorkoutExerciseForm = {
   sets: WorkoutSetForm[];
 };
 
+type AssessmentMetricForm = {
+  id: string;
+  label: string;
+  value: string;
+  unit: string;
+};
+
+type PackageForm = {
+  templateId: string;
+  purchasedDate: string;
+  startsDate: string;
+  expiresDate: string;
+  paymentStatus: PaymentStatus;
+  paymentMethod: PaymentMethod;
+  amountPaid: string;
+  notes: string;
+};
+
 function splitCsv(value: string) {
   return value
     .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function splitLines(value: string) {
-  return value
-    .split("\n")
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -119,10 +129,8 @@ function buildClientProfileForm(client?: ClientProfile | null) {
     email: client.email,
     phone: client.phone,
     gender: client.gender,
-    preferredLanguage: client.preferredLanguage,
     goalsText: client.goals.join(", "),
     tagsText: client.tags.join(", "),
-    consentStatus: client.consentStatus,
     notes: client.notes,
     healthFlagsText: stringifyHealthFlags(client.healthFlags),
   };
@@ -174,6 +182,44 @@ function createWorkoutEntryForm(defaultLocation = "") {
   };
 }
 
+function createAssessmentMetricForm(): AssessmentMetricForm {
+  return {
+    id: `metric-form-${crypto.randomUUID()}`,
+    label: "",
+    value: "",
+    unit: "",
+  };
+}
+
+function getSuggestedPaidAmount(
+  paymentStatus: PaymentStatus,
+  templatePrice: number,
+  currentAmount = "",
+) {
+  if (paymentStatus === "paid") {
+    return String(templatePrice);
+  }
+
+  if (paymentStatus === "partial") {
+    return currentAmount || String(templatePrice);
+  }
+
+  return "";
+}
+
+function createPackageForm(templateId = "", templatePrice = 0): PackageForm {
+  return {
+    templateId,
+    purchasedDate: dateInputValue(),
+    startsDate: dateInputValue(),
+    expiresDate: dateInputValue(60),
+    paymentStatus: "paid",
+    paymentMethod: "card",
+    amountPaid: templatePrice > 0 ? String(templatePrice) : "",
+    notes: "",
+  };
+}
+
 function combineDateTime(date: string, time: string) {
   return `${date}T${time}:00.000Z`;
 }
@@ -189,7 +235,6 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     state,
     addPackagePurchase,
     addBodyAssessment,
-    addWorkoutPlan,
     addWorkoutSession,
     updateClient,
     refreshNutritionPlan,
@@ -201,47 +246,49 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [nutritionError, setNutritionError] = useState<string | null>(null);
   const [isNutritionRefreshing, setIsNutritionRefreshing] = useState(false);
-  const [packageForm, setPackageForm] = useState({
-    templateId: state.packageTemplates[0]?.id ?? "",
-    purchasedDate: dateInputValue(),
-    startsDate: dateInputValue(),
-    expiresDate: dateInputValue(60),
-    paymentStatus: "pending",
-    amountPaid: "",
-    notes: "",
-  });
+  const [packageForm, setPackageForm] = useState<PackageForm>(() =>
+    createPackageForm(
+      state.packageTemplates[0]?.id ?? "",
+      state.packageTemplates[0]?.price ?? 0,
+    ),
+  );
   const [assessmentForm, setAssessmentForm] = useState({
     recordedDate: dateInputValue(),
     notes: "",
-    metrics: [
-      { label: "", value: "", unit: "" },
-      { label: "", value: "", unit: "" },
-      { label: "", value: "", unit: "" },
-    ],
+    metrics: [createAssessmentMetricForm()],
   });
   const [packageError, setPackageError] = useState<string | null>(null);
   const [assessmentError, setAssessmentError] = useState<string | null>(null);
-  const [workoutPlanForm, setWorkoutPlanForm] = useState({
-    title: "",
-    goal: "",
-    focusAreasText: "",
-    sessionPatternText: "",
-    activeFrom: dateInputValue(),
-  });
   const [workoutEntryForm, setWorkoutEntryForm] = useState(() =>
     createWorkoutEntryForm(state.trainingLocations[0]?.name ?? ""),
   );
-  const [workoutPlanError, setWorkoutPlanError] = useState<string | null>(null);
   const [workoutEntryError, setWorkoutEntryError] = useState<string | null>(null);
 
   useEffect(() => {
-    const defaultTemplateId = state.packageTemplates[0]?.id ?? "";
-    setPackageForm((current) =>
-      current.templateId &&
-      state.packageTemplates.some((template) => template.id === current.templateId)
-        ? current
-        : { ...current, templateId: defaultTemplateId },
-    );
+    const fallbackTemplate = state.packageTemplates[0];
+    setPackageForm((current) => {
+      const template =
+        state.packageTemplates.find((item) => item.id === current.templateId) ?? fallbackTemplate;
+      if (!template) {
+        return current;
+      }
+
+      const nextTemplateId = template.id;
+      const nextAmount =
+        current.templateId === nextTemplateId
+          ? current.amountPaid
+          : getSuggestedPaidAmount(current.paymentStatus, template.price, current.amountPaid);
+
+      if (current.templateId === nextTemplateId && current.amountPaid === nextAmount) {
+        return current;
+      }
+
+      return {
+        ...current,
+        templateId: nextTemplateId,
+        amountPaid: nextAmount,
+      };
+    });
   }, [state.packageTemplates]);
 
   useEffect(() => {
@@ -269,6 +316,9 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
   const nextSession = getClientUpcomingSession(state, clientId);
   const drafts = getClientDrafts(state, clientId).slice(0, 3);
   const messages = getClientMessages(state, clientId).slice(0, 4);
+  const reminders = state.reminders
+    .filter((reminder) => reminder.clientId === clientId)
+    .slice(0, 4);
   const mealDistribution = nutritionPlan
     ? [
         {
@@ -288,6 +338,35 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
         },
       ]
     : [];
+  const selectedPackageTemplate =
+    state.packageTemplates.find((template) => template.id === packageForm.templateId) ?? null;
+
+  function setPackageTemplate(templateId: string) {
+    const nextTemplate = state.packageTemplates.find((template) => template.id === templateId);
+    const nextPrice = nextTemplate?.price ?? 0;
+
+    setPackageForm((current) => ({
+      ...current,
+      templateId,
+      amountPaid: getSuggestedPaidAmount(current.paymentStatus, nextPrice, current.amountPaid),
+    }));
+  }
+
+  function setPackagePaymentStatus(paymentStatus: PaymentStatus) {
+    setPackageForm((current) => ({
+      ...current,
+      paymentStatus,
+      amountPaid: getSuggestedPaidAmount(
+        paymentStatus,
+        selectedPackageTemplate?.price ?? 0,
+        current.amountPaid,
+      ),
+    }));
+  }
+
+  function setPackagePaymentMethod(paymentMethod: PaymentMethod) {
+    setPackageForm((current) => ({ ...current, paymentMethod }));
+  }
 
   async function handleManualNutritionRefresh() {
     setNutritionError(null);
@@ -340,10 +419,10 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
       email,
       phone: profileForm.phone.trim(),
       gender: profileForm.gender.trim() || "unspecified",
-      preferredLanguage: profileForm.preferredLanguage as CreateClientInput["preferredLanguage"],
+      preferredLanguage: client.preferredLanguage,
       goals: splitCsv(profileForm.goalsText),
       tags: splitCsv(profileForm.tagsText),
-      consentStatus: profileForm.consentStatus as CreateClientInput["consentStatus"],
+      consentStatus: client.consentStatus,
       notes: profileForm.notes.trim(),
       healthFlags: parseHealthFlags(profileForm.healthFlagsText),
     };
@@ -373,10 +452,17 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     }
 
     const template = state.packageTemplates.find((item) => item.id === packageForm.templateId);
+    if (!template) {
+      setPackageError(t("forms.requiredError"));
+      return;
+    }
+
     const amountPaid =
       packageForm.paymentStatus === "paid"
-        ? template?.price ?? 0
-        : Number(packageForm.amountPaid || 0);
+        ? template.price
+        : packageForm.paymentStatus === "partial"
+          ? Number(packageForm.amountPaid || 0)
+          : 0;
 
     if (packageForm.paymentStatus === "partial" && amountPaid <= 0) {
       setPackageError(t("forms.requiredError"));
@@ -391,16 +477,12 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
       expiresAt: isoFromDate(packageForm.expiresDate, 21),
       paymentStatus: packageForm.paymentStatus as CreatePackagePurchaseInput["paymentStatus"],
       amountPaid,
+      paymentMethod: packageForm.paymentMethod,
       notes: packageForm.notes.trim(),
     };
 
     addPackagePurchase(input);
-    setPackageForm((current) => ({
-      ...current,
-      paymentStatus: "pending",
-      amountPaid: "",
-      notes: "",
-    }));
+    setPackageForm(createPackageForm(state.packageTemplates[0]?.id ?? "", state.packageTemplates[0]?.price ?? 0));
   }
 
   function submitAssessment(event: FormEvent<HTMLFormElement>) {
@@ -436,39 +518,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     setAssessmentForm({
       recordedDate: dateInputValue(),
       notes: "",
-      metrics: [
-        { label: "", value: "", unit: "" },
-        { label: "", value: "", unit: "" },
-        { label: "", value: "", unit: "" },
-      ],
-    });
-  }
-
-  function submitWorkoutPlan(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setWorkoutPlanError(null);
-
-    if (!workoutPlanForm.title.trim() || !workoutPlanForm.goal.trim()) {
-      setWorkoutPlanError(t("forms.requiredError"));
-      return;
-    }
-
-    const input: CreateWorkoutPlanInput = {
-      clientId,
-      title: workoutPlanForm.title.trim(),
-      goal: workoutPlanForm.goal.trim(),
-      focusAreas: splitCsv(workoutPlanForm.focusAreasText),
-      sessionPattern: splitLines(workoutPlanForm.sessionPatternText),
-      activeFrom: isoFromDate(workoutPlanForm.activeFrom, 6),
-    };
-
-    addWorkoutPlan(input);
-    setWorkoutPlanForm({
-      title: "",
-      goal: "",
-      focusAreasText: "",
-      sessionPatternText: "",
-      activeFrom: dateInputValue(),
+      metrics: [createAssessmentMetricForm()],
     });
   }
 
@@ -617,6 +667,41 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     }));
   }
 
+  function updateAssessmentMetric(
+    metricId: string,
+    patch: Partial<Omit<AssessmentMetricForm, "id">>,
+  ) {
+    setAssessmentForm((current) => ({
+      ...current,
+      metrics: current.metrics.map((metric) =>
+        metric.id === metricId ? { ...metric, ...patch } : metric,
+      ),
+    }));
+  }
+
+  function addAssessmentMetricField() {
+    setAssessmentForm((current) => ({
+      ...current,
+      metrics: [...current.metrics, createAssessmentMetricForm()],
+    }));
+  }
+
+  function removeAssessmentMetricField(metricId: string) {
+    setAssessmentForm((current) => {
+      if (current.metrics.length === 1) {
+        return {
+          ...current,
+          metrics: [createAssessmentMetricForm()],
+        };
+      }
+
+      return {
+        ...current,
+        metrics: current.metrics.filter((metric) => metric.id !== metricId),
+      };
+    });
+  }
+
   return (
     <div className="space-y-6">
       <PageLead eyebrow={t("nav.clients")} title={client.fullName} />
@@ -687,21 +772,15 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
             </div>
           }
         >
-          <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="font-semibold text-[color:var(--ink)]">{t("clientProfile.profileDetails")}</p>
-                <p className="mt-1 text-sm leading-6 text-[color:var(--muted-ink)]">
-                  {client.email} / {client.phone}
-                </p>
+            <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-[color:var(--ink)]">{t("clientProfile.profileDetails")}</p>
+                  <p className="mt-1 text-sm leading-6 text-[color:var(--muted-ink)]">
+                    {client.email} / {client.phone}
+                  </p>
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge status={client.consentStatus} />
-                <span className="rounded-full bg-[color:var(--sand-2)] px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
-                  {client.preferredLanguage.toUpperCase()}
-                </span>
-              </div>
-            </div>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div className="space-y-3 text-sm leading-6 text-[color:var(--muted-ink)]">
@@ -820,42 +899,6 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                     }
                     className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
                   />
-                </DataLabel>
-              </div>
-
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <DataLabel label={t("fields.preferredLanguage")}>
-                  <select
-                    value={profileForm.preferredLanguage}
-                    onChange={(event) =>
-                      setProfileForm((current) => ({
-                        ...current,
-                        preferredLanguage: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-                  >
-                    <option value="en">EN</option>
-                    <option value="et">ET</option>
-                  </select>
-                </DataLabel>
-                <DataLabel label={t("fields.consentStatus")}>
-                  <select
-                    value={profileForm.consentStatus}
-                    onChange={(event) =>
-                      setProfileForm((current) => ({
-                        ...current,
-                        consentStatus: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-                  >
-                    {(["pending", "signed", "declined"] as const).map((status) => (
-                      <option key={status} value={status}>
-                        {t(`status.${status}`)}
-                      </option>
-                    ))}
-                  </select>
                 </DataLabel>
               </div>
 
@@ -980,9 +1023,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                 <DataLabel label={t("fields.packageTemplate")}>
                   <select
                     value={packageForm.templateId}
-                    onChange={(event) =>
-                      setPackageForm((current) => ({ ...current, templateId: event.target.value }))
-                    }
+                    onChange={(event) => setPackageTemplate(event.target.value)}
                     className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
                   >
                     {state.packageTemplates.map((template) => (
@@ -996,7 +1037,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                   <select
                     value={packageForm.paymentStatus}
                     onChange={(event) =>
-                      setPackageForm((current) => ({ ...current, paymentStatus: event.target.value }))
+                      setPackagePaymentStatus(event.target.value as PaymentStatus)
                     }
                     className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
                   >
@@ -1008,6 +1049,25 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                   </select>
                 </DataLabel>
               </div>
+
+              <DataLabel label={t("fields.paymentMethod")}>
+                <div className="grid grid-cols-2 gap-2 rounded-full bg-white/75 p-1">
+                  {(["card", "cash"] as const).map((paymentMethod) => (
+                    <button
+                      key={paymentMethod}
+                      type="button"
+                      onClick={() => setPackagePaymentMethod(paymentMethod)}
+                      className={`rounded-full px-3 py-2 text-sm font-semibold transition ${
+                        packageForm.paymentMethod === paymentMethod
+                          ? "bg-[color:var(--ink)] text-white"
+                          : "text-[color:var(--ink)]"
+                      }`}
+                    >
+                      {t(`paymentMethod.${paymentMethod}`)}
+                    </button>
+                  ))}
+                </div>
+              </DataLabel>
 
               <div className="mt-4 grid gap-4 md:grid-cols-3">
                 <DataLabel label={t("fields.purchasedAt")}>
@@ -1042,17 +1102,18 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                 </DataLabel>
               </div>
 
-              <div className="mt-4 grid gap-4 md:grid-cols-[0.4fr_0.6fr]">
+              <div className="mt-4 grid gap-4 md:grid-cols-[0.45fr_0.55fr]">
                 <DataLabel label={t("fields.amountPaid")}>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     value={packageForm.amountPaid}
+                    disabled={packageForm.paymentStatus !== "partial"}
                     onChange={(event) =>
                       setPackageForm((current) => ({ ...current, amountPaid: event.target.value }))
                     }
-                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none disabled:cursor-not-allowed disabled:bg-[color:var(--sand-2)]/65"
                   />
                 </DataLabel>
                 <DataLabel label={t("forms.packageNotes")}>
@@ -1082,133 +1143,6 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
           </div>
         </SectionCard>
       </div>
-
-      <SectionCard title={t("clientProfile.assessments")} help={t("help.bodyAssessment")}>
-        <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-          <div className="space-y-3">
-            {assessments.length === 0 ? (
-              <EmptyState title={t("common.none")} body={t("clientProfile.noAssessment")} />
-            ) : (
-              assessments.slice(0, 4).map((assessment) => (
-                <div key={assessment.id} className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="font-semibold text-[color:var(--ink)]">{formatDate(assessment.recordedAt)}</p>
-                    <span className="text-sm text-[color:var(--muted-ink)]">{assessment.metrics.length}</span>
-                  </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                    {assessment.metrics.map((metric) => (
-                      <div key={metric.id} className="rounded-2xl bg-[color:var(--sand-2)] p-3 text-center">
-                        <p className="text-xs uppercase tracking-[0.18em] text-[color:var(--muted-ink)]">{metric.label}</p>
-                        <p className="mt-2 text-lg font-semibold text-[color:var(--ink)]">
-                          {metric.value}
-                          {metric.unit}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-[color:var(--muted-ink)]">{assessment.notes}</p>
-                </div>
-              ))
-            )}
-          </div>
-
-          <form
-            className="rounded-[24px] border border-[color:var(--line-soft)] bg-[color:var(--sand-2)]/55 p-4"
-            onSubmit={submitAssessment}
-          >
-            <div className="mb-4 space-y-1">
-              <p className="font-semibold text-[color:var(--ink)]">{t("forms.assessmentTitle")}</p>
-              <p className="text-sm leading-6 text-[color:var(--muted-ink)]">{t("forms.assessmentSubtitle")}</p>
-            </div>
-
-            <DataLabel label={t("fields.assessmentDate")}>
-              <input
-                type="date"
-                value={assessmentForm.recordedDate}
-                onChange={(event) =>
-                  setAssessmentForm((current) => ({ ...current, recordedDate: event.target.value }))
-                }
-                className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-              />
-            </DataLabel>
-
-            <div className="mt-4 space-y-3">
-              {assessmentForm.metrics.map((metric, index) => (
-                <div key={index} className="grid gap-3 md:grid-cols-[1.1fr_0.8fr_0.6fr]">
-                  <DataLabel label={t("fields.metricLabel")}>
-                    <input
-                      value={metric.label}
-                      onChange={(event) =>
-                        setAssessmentForm((current) => ({
-                          ...current,
-                          metrics: current.metrics.map((item, itemIndex) =>
-                            itemIndex === index ? { ...item, label: event.target.value } : item,
-                          ),
-                        }))
-                      }
-                      className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-                    />
-                  </DataLabel>
-                  <DataLabel label={t("fields.metricValue")}>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={metric.value}
-                      onChange={(event) =>
-                        setAssessmentForm((current) => ({
-                          ...current,
-                          metrics: current.metrics.map((item, itemIndex) =>
-                            itemIndex === index ? { ...item, value: event.target.value } : item,
-                          ),
-                        }))
-                      }
-                      className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-                    />
-                  </DataLabel>
-                  <DataLabel label={t("fields.metricUnit")}>
-                    <input
-                      value={metric.unit}
-                      onChange={(event) =>
-                        setAssessmentForm((current) => ({
-                          ...current,
-                          metrics: current.metrics.map((item, itemIndex) =>
-                            itemIndex === index ? { ...item, unit: event.target.value } : item,
-                          ),
-                        }))
-                      }
-                      className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-                    />
-                  </DataLabel>
-                </div>
-              ))}
-            </div>
-
-            <DataLabel label={t("fields.notes")}>
-              <textarea
-                value={assessmentForm.notes}
-                onChange={(event) =>
-                  setAssessmentForm((current) => ({ ...current, notes: event.target.value }))
-                }
-                rows={4}
-                className="mt-4 w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm leading-6 outline-none"
-              />
-            </DataLabel>
-
-            {assessmentError ? (
-              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-                {assessmentError}
-              </div>
-            ) : null}
-
-            <button
-              type="submit"
-              className="mt-4 rounded-full bg-[color:var(--ink)] px-5 py-3 text-sm font-semibold text-white"
-            >
-              {t("forms.assessmentSubmit")}
-            </button>
-          </form>
-        </div>
-      </SectionCard>
 
       <SectionCard
         title={t("clientProfile.workouts")}
@@ -1320,97 +1254,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
             </div>
           </div>
 
-          <div className="space-y-5">
-            <form
-              className="rounded-[24px] border border-[color:var(--line-soft)] bg-[color:var(--sand-2)]/55 p-4"
-              onSubmit={submitWorkoutPlan}
-            >
-              <div className="mb-4 space-y-1">
-                <p className="font-semibold text-[color:var(--ink)]">{t("forms.workoutPlanTitle")}</p>
-                <p className="text-sm leading-6 text-[color:var(--muted-ink)]">
-                  {t("forms.workoutPlanSubtitle")}
-                </p>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <DataLabel label={t("fields.title")}>
-                  <input
-                    value={workoutPlanForm.title}
-                    onChange={(event) =>
-                      setWorkoutPlanForm((current) => ({ ...current, title: event.target.value }))
-                    }
-                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-                  />
-                </DataLabel>
-                <DataLabel label={t("fields.activeFrom")}>
-                  <input
-                    type="date"
-                    value={workoutPlanForm.activeFrom}
-                    onChange={(event) =>
-                      setWorkoutPlanForm((current) => ({
-                        ...current,
-                        activeFrom: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-                  />
-                </DataLabel>
-              </div>
-
-              <DataLabel label={t("fields.goal")}>
-                <textarea
-                  value={workoutPlanForm.goal}
-                  onChange={(event) =>
-                    setWorkoutPlanForm((current) => ({ ...current, goal: event.target.value }))
-                  }
-                  rows={3}
-                  className="mt-4 w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm leading-6 outline-none"
-                />
-              </DataLabel>
-
-              <DataLabel label={t("fields.focusAreas")}>
-                <textarea
-                  value={workoutPlanForm.focusAreasText}
-                  onChange={(event) =>
-                    setWorkoutPlanForm((current) => ({
-                      ...current,
-                      focusAreasText: event.target.value,
-                    }))
-                  }
-                  rows={2}
-                  className="mt-4 w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm leading-6 outline-none"
-                />
-                <p className="text-xs text-[color:var(--muted-ink)]">{t("forms.commaHint")}</p>
-              </DataLabel>
-
-              <DataLabel label={t("fields.sessionPattern")}>
-                <textarea
-                  value={workoutPlanForm.sessionPatternText}
-                  onChange={(event) =>
-                    setWorkoutPlanForm((current) => ({
-                      ...current,
-                      sessionPatternText: event.target.value,
-                    }))
-                  }
-                  rows={3}
-                  className="mt-4 w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm leading-6 outline-none"
-                />
-              </DataLabel>
-
-              {workoutPlanError ? (
-                <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-                  {workoutPlanError}
-                </div>
-              ) : null}
-
-              <button
-                type="submit"
-                className="mt-4 rounded-full bg-[color:var(--ink)] px-5 py-3 text-sm font-semibold text-white"
-              >
-                {t("forms.workoutPlanSubmit")}
-              </button>
-            </form>
-
+          <div>
             <form
               className="rounded-[24px] border border-[color:var(--line-soft)] bg-[color:var(--sand-2)]/55 p-4"
               onSubmit={submitWorkoutEntry}
@@ -1766,31 +1610,203 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
         </div>
       </SectionCard>
 
-      <SectionCard title={t("clientProfile.communication")} help={t("help.communication")}>
-        <div className="space-y-3">
-          {messages.map((message) => (
-            <div key={message.id} className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-semibold text-[color:var(--ink)]">{message.subject}</p>
-                <StatusBadge status={message.direction === "outbound" ? "sent" : "active"} />
-              </div>
-              <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">{message.body}</p>
+      <SectionCard title={t("clientProfile.assessments")} help={t("help.bodyAssessment")}>
+        <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+          <div className="space-y-3">
+            {assessments.length === 0 ? (
+              <EmptyState title={t("common.none")} body={t("clientProfile.noAssessment")} />
+            ) : (
+              assessments.slice(0, 4).map((assessment) => (
+                <div key={assessment.id} className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="font-semibold text-[color:var(--ink)]">{formatDate(assessment.recordedAt)}</p>
+                    <span className="text-sm text-[color:var(--muted-ink)]">{assessment.metrics.length}</span>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    {assessment.metrics.map((metric) => (
+                      <div key={metric.id} className="rounded-2xl bg-[color:var(--sand-2)] p-3 text-center">
+                        <p className="text-xs uppercase tracking-[0.18em] text-[color:var(--muted-ink)]">{metric.label}</p>
+                        <p className="mt-2 text-lg font-semibold text-[color:var(--ink)]">
+                          {metric.value}
+                          {metric.unit}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-[color:var(--muted-ink)]">{assessment.notes}</p>
+                </div>
+              ))
+            )}
+          </div>
+
+          <form
+            className="rounded-[24px] border border-[color:var(--line-soft)] bg-[color:var(--sand-2)]/55 p-4"
+            onSubmit={submitAssessment}
+          >
+            <div className="mb-4 space-y-1">
+              <p className="font-semibold text-[color:var(--ink)]">{t("forms.assessmentTitle")}</p>
+              <p className="text-sm leading-6 text-[color:var(--muted-ink)]">{t("forms.assessmentSubtitle")}</p>
             </div>
-          ))}
+
+            <DataLabel label={t("fields.assessmentDate")}>
+              <input
+                type="date"
+                value={assessmentForm.recordedDate}
+                onChange={(event) =>
+                  setAssessmentForm((current) => ({ ...current, recordedDate: event.target.value }))
+                }
+                className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+              />
+            </DataLabel>
+
+            <div className="mt-4 space-y-3">
+              {assessmentForm.metrics.map((metric) => (
+                <div
+                  key={metric.id}
+                  className="rounded-[22px] border border-[color:var(--line-soft)] bg-white/70 p-4"
+                >
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-[color:var(--ink)]">{metric.label || t("fields.metricLabel")}</p>
+                    <button
+                      type="button"
+                      onClick={() => removeAssessmentMetricField(metric.id)}
+                      className="rounded-full border border-[color:var(--line-soft)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                    >
+                      {t("forms.removeMetric")}
+                    </button>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-[1.1fr_0.8fr_0.6fr]">
+                    <DataLabel label={t("fields.metricLabel")}>
+                      <input
+                        value={metric.label}
+                        onChange={(event) => updateAssessmentMetric(metric.id, { label: event.target.value })}
+                        className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                      />
+                    </DataLabel>
+                    <DataLabel label={t("fields.metricValue")}>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={metric.value}
+                        onChange={(event) => updateAssessmentMetric(metric.id, { value: event.target.value })}
+                        className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                      />
+                    </DataLabel>
+                    <DataLabel label={t("fields.metricUnit")}>
+                      <input
+                        value={metric.unit}
+                        onChange={(event) => updateAssessmentMetric(metric.id, { unit: event.target.value })}
+                        className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                      />
+                    </DataLabel>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={addAssessmentMetricField}
+                className="rounded-full border border-[color:var(--line-soft)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+              >
+                {t("forms.addMetric")}
+              </button>
+            </div>
+
+            <DataLabel label={t("fields.notes")}>
+              <textarea
+                value={assessmentForm.notes}
+                onChange={(event) =>
+                  setAssessmentForm((current) => ({ ...current, notes: event.target.value }))
+                }
+                rows={4}
+                className="mt-4 w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm leading-6 outline-none"
+              />
+            </DataLabel>
+
+            {assessmentError ? (
+              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                {assessmentError}
+              </div>
+            ) : null}
+
+            <button
+              type="submit"
+              className="mt-4 rounded-full bg-[color:var(--ink)] px-5 py-3 text-sm font-semibold text-white"
+            >
+              {t("forms.assessmentSubmit")}
+            </button>
+          </form>
         </div>
       </SectionCard>
 
-      <SectionCard title={t("clientProfile.drafts")} help={t("help.aiDrafts")}>
-        <div className="grid gap-4 md:grid-cols-3">
-          {drafts.map((draft) => (
-            <div key={draft.id} className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-semibold text-[color:var(--ink)]">{draft.title}</p>
-                <StatusBadge status={draft.status} />
-              </div>
-              <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">{draft.subject}</p>
+      <SectionCard
+        title={t("clientProfile.communication")}
+        subtitle={t("clientProfile.communicationSubtitle")}
+        help={t("help.communication")}
+      >
+        <div className="grid gap-4 xl:grid-cols-3">
+          <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
+            <p className="font-semibold text-[color:var(--ink)]">{t("clientProfile.messages")}</p>
+            <div className="mt-4 space-y-3">
+              {messages.length === 0 ? (
+                <EmptyState title={t("common.none")} body={t("clientProfile.noMessages")} />
+              ) : (
+                messages.map((message) => (
+                  <div key={message.id} className="rounded-2xl bg-[color:var(--sand-2)]/70 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-medium text-[color:var(--ink)]">{message.subject}</p>
+                      <StatusBadge status={message.direction === "outbound" ? "sent" : "active"} />
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">{message.body}</p>
+                  </div>
+                ))
+              )}
             </div>
-          ))}
+          </div>
+
+          <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
+            <p className="font-semibold text-[color:var(--ink)]">{t("clientProfile.reminders")}</p>
+            <div className="mt-4 space-y-3">
+              {reminders.length === 0 ? (
+                <EmptyState title={t("common.none")} body={t("clientProfile.noReminders")} />
+              ) : (
+                reminders.map((reminder) => (
+                  <div key={reminder.id} className="rounded-2xl bg-[color:var(--sand-2)]/70 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-medium text-[color:var(--ink)]">{reminder.title}</p>
+                      <StatusBadge status={reminder.status} />
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">
+                      {t(reminder.channel === "calendar" ? "common.calendarChannel" : "common.emailChannel")} /{" "}
+                      {formatDate(reminder.dueAt)}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
+            <p className="font-semibold text-[color:var(--ink)]">{t("clientProfile.drafts")}</p>
+            <div className="mt-4 space-y-3">
+              {drafts.length === 0 ? (
+                <EmptyState title={t("common.none")} body={t("clientProfile.noDrafts")} />
+              ) : (
+                drafts.map((draft) => (
+                  <div key={draft.id} className="rounded-2xl bg-[color:var(--sand-2)]/70 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-medium text-[color:var(--ink)]">{draft.title}</p>
+                      <StatusBadge status={draft.status} />
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">{draft.subject}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       </SectionCard>
 

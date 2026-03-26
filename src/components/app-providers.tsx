@@ -1300,7 +1300,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
                     paidAt: input.purchasedAt,
                     amount: paidAmount,
                     currency: template.currency,
-                    method: "manual entry",
+                    method: input.paymentMethod,
                   },
                   ...previous.paymentRecords,
                 ]
