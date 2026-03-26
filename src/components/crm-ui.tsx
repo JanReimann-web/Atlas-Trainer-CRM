@@ -66,11 +66,13 @@ export function StatCard({
   detail?: string;
 }) {
   return (
-    <div className="panel-surface rounded-[28px] p-5">
-      <p className="text-xs uppercase tracking-[0.28em] text-[color:var(--muted-ink)]">
+    <div className="panel-surface min-w-0 rounded-[24px] p-4 sm:rounded-[28px] sm:p-5">
+      <p className="text-[11px] uppercase tracking-[0.2em] text-[color:var(--muted-ink)] sm:text-xs sm:tracking-[0.28em]">
         {label}
       </p>
-      <p className="mt-3 font-display text-4xl text-[color:var(--ink)]">{value}</p>
+      <p className="mt-3 break-words font-display text-[clamp(2.6rem,12vw,3.3rem)] text-[color:var(--ink)] sm:text-4xl">
+        {value}
+      </p>
       {detail ? (
         <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">{detail}</p>
       ) : null}
@@ -92,11 +94,13 @@ export function SectionCard({
   children: ReactNode;
 }) {
   return (
-    <section className="panel-surface rounded-[30px] p-6">
+    <section className="panel-surface min-w-0 rounded-[26px] p-4 sm:rounded-[30px] sm:p-6">
       <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-semibold text-[color:var(--ink)]">{title}</h2>
+            <h2 className="break-words text-lg font-semibold text-[color:var(--ink)] sm:text-xl">
+              {title}
+            </h2>
             {help ? <InfoHint content={help} /> : null}
           </div>
           {subtitle ? (
