@@ -320,8 +320,8 @@ export function LanguageToggle({
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { state, persistenceMode, error } = useCRM();
-  const { user, liveData, firebaseConfigured, signOutUser } = useAuth();
+  const { state } = useCRM();
+  const { user, signOutUser } = useAuth();
   const { t, formatDate } = useLocaleContext();
   const nextSession = useMemo(() => getUpcomingSessions(state, 1)[0], [state]);
 
@@ -349,6 +349,25 @@ export function AppShell({ children }: { children: ReactNode }) {
               </p>
             </div>
 
+            {nextSession ? (
+              <Link
+                href={`/clients/${nextSession.primaryClientId}/sessions/${nextSession.id}`}
+                className="flex items-center gap-3 rounded-[28px] bg-[color:var(--ink)] px-4 py-4 text-white shadow-[0_14px_32px_rgba(27,39,33,0.18)] transition hover:translate-y-[-1px] hover:bg-[#24342c]"
+              >
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/12 text-lg leading-none text-white">
+                  &gt;
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.24em] text-white/72">
+                    {t("app.upcomingSession")}
+                  </span>
+                  <span className="mt-1 block text-sm font-semibold text-white">
+                    {formatDate(nextSession.startAt)}
+                  </span>
+                </span>
+              </Link>
+            ) : null}
+
             <nav className="space-y-2">
               {navItems.map((item) => {
                 const active = pathname === item.href;
@@ -371,78 +390,53 @@ export function AppShell({ children }: { children: ReactNode }) {
 
             <div className="rounded-[28px] border border-[color:var(--line-soft)] bg-white/75 p-4 text-sm">
               <LanguageToggle showLabel />
+              {user ? (
+                <button
+                  type="button"
+                  onClick={() => void signOutUser()}
+                  className="mt-4 w-full rounded-full bg-[color:var(--clay)] px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(196,93,66,0.22)] transition hover:translate-y-[-1px]"
+                >
+                  {t("auth.signOut")}
+                </button>
+              ) : null}
             </div>
           </div>
         </aside>
 
         <div className="space-y-6 pb-[calc(env(safe-area-inset-bottom)+6.5rem)] lg:pb-0">
-          <header className="panel-surface rounded-[32px] px-5 py-4">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-[color:var(--muted-ink)]">
-                  {t("app.allUsers")}
-                </p>
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <span className="rounded-full bg-[color:var(--sage)]/15 px-3 py-1 text-sm font-semibold text-[color:var(--sage)]">
-                    {state.users.map((coach) => coach.name.split(" ")[0]).join(" + ")}
+          <div className="space-y-4 lg:hidden">
+            {nextSession ? (
+              <Link
+                href={`/clients/${nextSession.primaryClientId}/sessions/${nextSession.id}`}
+                className="panel-surface flex items-center gap-3 rounded-[28px] px-4 py-4 text-[color:var(--paper)]"
+              >
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[color:var(--ink)] text-lg leading-none text-white">
+                  &gt;
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.24em] text-[color:var(--muted-ink)]">
+                    {t("app.upcomingSession")}
                   </span>
-                  {user?.email ? (
-                    <span className="rounded-full bg-white px-3 py-1 text-sm font-medium text-[color:var(--ink)]">
-                      {user.email}
-                    </span>
-                  ) : null}
-                  {nextSession ? (
-                    <Link
-                      href={`/clients/${nextSession.primaryClientId}/sessions/${nextSession.id}`}
-                      className="inline-flex max-w-full items-center gap-3 rounded-full bg-[color:var(--ink)] px-3 py-2 text-[color:var(--paper)] shadow-[0_14px_32px_rgba(27,39,33,0.18)] transition hover:translate-y-[-1px] hover:bg-[#24342c]"
-                    >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/12 text-lg leading-none text-white">
-                        &gt;
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block text-[10px] font-semibold uppercase tracking-[0.24em] text-white/72">
-                          {t("app.upcomingSession")}
-                        </span>
-                        <span className="block truncate text-sm font-semibold text-white">
-                          {formatDate(nextSession.startAt)}
-                        </span>
-                      </span>
-                    </Link>
-                  ) : null}
-                </div>
-              </div>
+                  <span className="mt-1 block text-sm font-semibold text-[color:var(--ink)]">
+                    {formatDate(nextSession.startAt)}
+                  </span>
+                </span>
+              </Link>
+            ) : null}
 
-              <div className="flex flex-col gap-3 md:items-end">
-                <div className="w-full md:hidden">
-                  <LanguageToggle compact />
-                </div>
-                <div className="rounded-[24px] bg-[color:var(--sand-2)] px-4 py-3 text-sm leading-6 text-[color:var(--muted-ink)]">
-                  <p className="font-semibold text-[color:var(--ink)]">
-                    {liveData ? t("common.firebaseConnected") : t("common.outlookReady")}
-                  </p>
-                  <p>
-                    {liveData
-                      ? t("common.firebaseConnectedDetail")
-                      : t("common.integrationFallbackDetail")}
-                  </p>
-                  {error && persistenceMode === "firebase" ? (
-                    <p className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-900">
-                      {error}
-                    </p>
-                  ) : null}
-                  {firebaseConfigured && persistenceMode === "firebase" ? (
-                    <button
-                      type="button"
-                      onClick={() => void signOutUser()}
-                      className="mt-3 rounded-full bg-[color:var(--ink)] px-3 py-1.5 text-xs font-semibold text-white"
-                    >
-                      {t("auth.signOut")}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
+            <div className="panel-surface rounded-[28px] p-4">
+              <LanguageToggle showLabel />
+              {user ? (
+                <button
+                  type="button"
+                  onClick={() => void signOutUser()}
+                  className="mt-4 w-full rounded-full bg-[color:var(--clay)] px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(196,93,66,0.22)] transition hover:translate-y-[-1px]"
+                >
+                  {t("auth.signOut")}
+                </button>
+              ) : null}
             </div>
-          </header>
+          </div>
 
           <main>{children}</main>
         </div>

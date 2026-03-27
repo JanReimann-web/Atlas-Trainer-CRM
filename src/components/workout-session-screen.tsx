@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useCRM, useLocaleContext } from "@/components/app-providers";
 import {
@@ -330,7 +331,12 @@ export function WorkoutSessionScreen({
         title={session.title}
         subtitle={
           <span>
-            <strong className="font-semibold text-[color:var(--ink)]">{client.fullName}</strong>
+            <Link
+              href={`/clients/${client.id}`}
+              className="font-semibold text-[color:var(--ink)] transition hover:text-[color:var(--clay)]"
+            >
+              {client.fullName}
+            </Link>
             <span>{` / ${subtitleMeta.join(" / ")}`}</span>
           </span>
         }
