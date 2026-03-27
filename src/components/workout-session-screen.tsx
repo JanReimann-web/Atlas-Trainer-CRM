@@ -246,7 +246,7 @@ export function WorkoutSessionScreen({
     );
   }
 
-  const { client, plannedWorkout, session, sessionWorkout } = bundle;
+  const { client, session, sessionWorkout } = bundle;
   if (!sessionWorkout) {
     return (
       <EmptyState
@@ -363,16 +363,15 @@ export function WorkoutSessionScreen({
         <div className="space-y-6">
           <SectionCard
             title={t("workout.title")}
-            subtitle={plannedWorkout?.objective ?? session.title}
             help={t("help.plannedActual")}
             aside={
-              <div className="flex flex-wrap gap-3">
+              <div className="flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setShowReworkPanel((previous) => !previous)}
                   title={t("workout.reworkToggleTitle")}
                   aria-label={t("workout.reworkToggleTitle")}
-                  className="flex h-11 w-11 items-center justify-center rounded-full border border-[color:var(--line-soft)] bg-white/75 text-lg"
+                  className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-[color:var(--line-soft)] bg-white/75 text-lg"
                 >
                   🪄
                 </button>
@@ -380,7 +379,7 @@ export function WorkoutSessionScreen({
                   type="button"
                   onClick={() => void handleCompleteSession()}
                   disabled={isCompletingSession || session.status === "completed"}
-                  className="rounded-full bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-14 items-center justify-center whitespace-nowrap rounded-full bg-[color:var(--ink)] px-6 text-sm font-semibold leading-none text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isCompletingSession ? t("workout.completing") : t("workout.completeSession")}
                 </button>
@@ -428,10 +427,6 @@ export function WorkoutSessionScreen({
               </div>
             ) : null}
 
-            <p className="mb-5 text-sm text-[color:var(--muted-ink)]">
-              {t("workout.autoNextHint")}
-            </p>
-
             <div className="space-y-4">
               {sessionWorkout.exercises.map((exercise) => (
                 <div
@@ -444,10 +439,6 @@ export function WorkoutSessionScreen({
                         <p className="text-lg font-semibold text-[color:var(--ink)]">{exercise.name}</p>
                         <StatusBadge status={exercise.status} />
                       </div>
-                      <p className="mt-1 text-sm text-[color:var(--muted-ink)]">
-                        {plannedWorkout?.exercises.find((planned) => planned.id === exercise.plannedExerciseId)?.note ??
-                          t("workout.liveAdjustmentsAllowed")}
-                      </p>
                     </div>
                     <button
                       type="button"
@@ -620,7 +611,6 @@ export function WorkoutSessionScreen({
           {summaryDraft ? (
             <SectionCard
               title={t("workout.summaryCardTitle")}
-              subtitle={t("workout.summaryCardSubtitle")}
               help={t("help.aiDrafts")}
             >
               <DraftEditor
@@ -646,7 +636,6 @@ export function WorkoutSessionScreen({
           {!summaryDraft ? (
             <SectionCard
               title={t("workout.summaryCardTitle")}
-              subtitle={t("workout.summaryPendingSubtitle")}
               help={t("help.aiDrafts")}
             >
               <EmptyState
