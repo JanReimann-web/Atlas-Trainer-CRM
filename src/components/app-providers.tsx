@@ -538,6 +538,188 @@ function buildClientProfileFromLead(
   };
 }
 
+function clientHasTraining(previous: CRMState, clientId: string) {
+  return (
+    previous.workoutPlans.some(
+      (plan) => plan.clientId === clientId && plan.status === "active",
+    ) ||
+    previous.sessions.some(
+      (session) =>
+        session.primaryClientId === clientId || session.clientIds.includes(clientId),
+    )
+  );
+}
+
+function getReplaceableStarterTraining(previous: CRMState, clientId: string) {
+  const activePlan = previous.workoutPlans.find(
+    (plan) =>
+      plan.clientId === clientId && plan.status === "active" && plan.origin === "ai",
+  );
+  if (!activePlan) {
+    return null;
+  }
+
+  const starterPlannedWorkouts = previous.plannedWorkouts.filter(
+    (workout) => workout.clientId === clientId && workout.sourcePlanId === activePlan.id,
+  );
+  if (starterPlannedWorkouts.length === 0) {
+    return null;
+  }
+
+  const starterSessionIds = new Set(starterPlannedWorkouts.map((workout) => workout.sessionId));
+  const starterSessions = previous.sessions.filter((session) => starterSessionIds.has(session.id));
+  if (starterSessions.length === 0) {
+    return null;
+  }
+
+  const hasLockedStarterSession = starterSessions.some(
+    (session) =>
+      session.status !== "planned" ||
+      Boolean(session.startAt) ||
+      Boolean(session.endAt) ||
+      Boolean(session.location) ||
+      Boolean(session.packagePurchaseId),
+  );
+
+  if (hasLockedStarterSession) {
+    return null;
+  }
+
+  const hasAdditionalClientSessions = previous.sessions.some(
+    (session) =>
+      (session.primaryClientId === clientId || session.clientIds.includes(clientId)) &&
+      !starterSessionIds.has(session.id),
+  );
+
+  if (hasAdditionalClientSessions) {
+    return null;
+  }
+
+  return {
+    activePlanId: activePlan.id,
+    plannedWorkoutIds: new Set(starterPlannedWorkouts.map((workout) => workout.id)),
+    sessionIds: starterSessionIds,
+    sessionWorkoutIds: new Set(
+      starterSessions
+        .map((session) => session.sessionWorkoutId)
+        .filter((value): value is string => Boolean(value)),
+    ),
+    reminderIds: new Set(
+      previous.reminders
+        .filter(
+          (reminder) => Boolean(reminder.sessionId) && starterSessionIds.has(reminder.sessionId!),
+        )
+        .map((reminder) => reminder.id),
+    ),
+  };
+}
+
+function applyStarterWorkoutState(
+  previous: CRMState,
+  client: ClientProfile,
+  workout: StarterWorkoutDraft,
+  options?: {
+    replaceExistingStarter?: boolean;
+  },
+) {
+  let baseState = previous;
+
+  if (options?.replaceExistingStarter) {
+    const replaceableStarter = getReplaceableStarterTraining(previous, client.id);
+    if (replaceableStarter) {
+      baseState = {
+        ...previous,
+        workoutPlans: previous.workoutPlans.filter(
+          (plan) => plan.id !== replaceableStarter.activePlanId,
+        ),
+        sessions: previous.sessions.filter(
+          (session) => !replaceableStarter.sessionIds.has(session.id),
+        ),
+        plannedWorkouts: previous.plannedWorkouts.filter(
+          (plannedWorkout) => !replaceableStarter.plannedWorkoutIds.has(plannedWorkout.id),
+        ),
+        sessionWorkouts: previous.sessionWorkouts.filter(
+          (sessionWorkout) => !replaceableStarter.sessionWorkoutIds.has(sessionWorkout.id),
+        ),
+        reminders: previous.reminders.filter(
+          (reminder) => !replaceableStarter.reminderIds.has(reminder.id),
+        ),
+      };
+    } else if (clientHasTraining(previous, client.id)) {
+      return previous;
+    }
+  } else if (clientHasTraining(previous, client.id)) {
+    return previous;
+  }
+
+  const now = timestamp();
+  const nextPlanId = `wp-${crypto.randomUUID()}`;
+  const nextPlan = {
+    id: nextPlanId,
+    clientId: client.id,
+    title: workout.planTitle.trim(),
+    status: "active" as const,
+    goal: workout.planGoal.trim(),
+    focusAreas: workout.focusAreas.filter(Boolean),
+    sessionPattern: workout.sessionPattern.filter(Boolean),
+    activeFrom: client.joinedAt,
+    createdAt: now,
+    updatedAt: now,
+    origin: "ai" as const,
+  };
+
+  const withPlan = {
+    ...baseState,
+    workoutPlans: [
+      nextPlan,
+      ...baseState.workoutPlans.map((plan) =>
+        plan.clientId === client.id && plan.status === "active"
+          ? {
+              ...plan,
+              status: "archived" as const,
+              updatedAt: now,
+            }
+          : plan,
+      ),
+    ],
+    activityEvents: [
+      {
+        id: `act-${crypto.randomUUID()}`,
+        actor: "AI",
+        clientId: client.id,
+        type: "workout-plan.created",
+        detail: `Generated the initial workout block for ${client.fullName}.`,
+        createdAt: now,
+      },
+      ...baseState.activityEvents,
+    ],
+  };
+
+  return createWorkoutSessionState(
+    withPlan,
+    {
+      clientId: client.id,
+      title: workout.sessionTitle,
+      objective: workout.sessionObjective,
+      startAt: "",
+      endAt: "",
+      kind: workout.sessionKind,
+      status: "planned",
+      location: "",
+      coachNote: workout.coachNote,
+      sessionNote: workout.sessionNote,
+      exercises: workout.exercises,
+    },
+    "AI",
+    {
+      sourcePlanId: nextPlanId,
+      activityType: "session.planned",
+      activityDetail: `AI generated the first workout for ${client.fullName}.`,
+      skipScheduleValidation: true,
+    },
+  );
+}
+
 function createNewSet(label: string) {
   return {
     id: `set-${crypto.randomUUID()}`,
@@ -1431,16 +1613,8 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const clientAlreadyHasTraining =
-      snapshot.workoutPlans.some(
-        (plan) => plan.clientId === clientId && plan.status === "active",
-      ) ||
-      snapshot.sessions.some(
-        (session) =>
-          session.primaryClientId === clientId || session.clientIds.includes(clientId),
-      );
-
-    if (clientAlreadyHasTraining) {
+    const replaceableStarter = getReplaceableStarterTraining(snapshot, clientId);
+    if (clientHasTraining(snapshot, clientId) && !replaceableStarter) {
       return;
     }
 
@@ -1450,87 +1624,9 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         if (!currentClient) {
           return previous;
         }
-
-        const existingTraining =
-          previous.workoutPlans.some(
-            (plan) => plan.clientId === clientId && plan.status === "active",
-          ) ||
-          previous.sessions.some(
-            (session) =>
-              session.primaryClientId === clientId ||
-              session.clientIds.includes(clientId),
-          );
-
-        if (existingTraining) {
-          return previous;
-        }
-
-        const now = timestamp();
-        const nextPlanId = `wp-${crypto.randomUUID()}`;
-        const nextPlan = {
-          id: nextPlanId,
-          clientId,
-          title: workout.planTitle.trim(),
-          status: "active" as const,
-          goal: workout.planGoal.trim(),
-          focusAreas: workout.focusAreas.filter(Boolean),
-          sessionPattern: workout.sessionPattern.filter(Boolean),
-          activeFrom: currentClient.joinedAt,
-          createdAt: now,
-          updatedAt: now,
-          origin: "ai" as const,
-        };
-
-        const withPlan = {
-          ...previous,
-          workoutPlans: [
-            nextPlan,
-            ...previous.workoutPlans.map((plan) =>
-              plan.clientId === clientId && plan.status === "active"
-                ? {
-                    ...plan,
-                    status: "archived" as const,
-                    updatedAt: now,
-                  }
-                : plan,
-            ),
-          ],
-          activityEvents: [
-            {
-              id: `act-${crypto.randomUUID()}`,
-              actor: "AI",
-              clientId,
-              type: "workout-plan.created",
-              detail: `Generated the initial workout block for ${currentClient.fullName}.`,
-              createdAt: now,
-            },
-            ...previous.activityEvents,
-          ],
-        };
-
-        return createWorkoutSessionState(
-          withPlan,
-          {
-            clientId,
-            title: workout.sessionTitle,
-            objective: workout.sessionObjective,
-            startAt: "",
-            endAt: "",
-            kind: workout.sessionKind,
-            status: "planned",
-            location: "",
-            coachNote: workout.coachNote,
-            sessionNote: workout.sessionNote,
-            exercises: workout.exercises,
-          },
-          "AI",
-          {
-            sourcePlanId: nextPlanId,
-            activityType: "session.planned",
-            activityDetail: `AI generated the first workout for ${currentClient.fullName}.`,
-            skipScheduleValidation: true,
-          },
-        );
+        return applyStarterWorkoutState(previous, currentClient, workout, {
+          replaceExistingStarter: true,
+        });
       });
     };
 
@@ -1612,27 +1708,35 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         };
       }),
     createClient: (input) => {
-      let createdClient: ClientProfile | null = null;
+      const snapshot = stateRef.current;
+      if (
+        snapshot.clients.some(
+          (client) => client.email.toLowerCase() === input.email.toLowerCase(),
+        )
+      ) {
+        return;
+      }
+
+      const client: ClientProfile = {
+        id: `client-${crypto.randomUUID()}`,
+        ...input,
+        joinedAt: timestamp(),
+        ownerId: snapshot.users[0]?.id ?? "user-maria",
+        avatarHue: randomHue(),
+      };
+      const starterWorkout = buildLocalStarterWorkout(client);
 
       applyCRMUpdate((previous) => {
         if (
           previous.clients.some(
-            (client) => client.email.toLowerCase() === input.email.toLowerCase(),
+            (existingClient) =>
+              existingClient.email.toLowerCase() === input.email.toLowerCase(),
           )
         ) {
           return previous;
         }
 
-        const client: ClientProfile = {
-          id: `client-${crypto.randomUUID()}`,
-          ...input,
-          joinedAt: timestamp(),
-          ownerId: previous.users[0]?.id ?? "user-maria",
-          avatarHue: randomHue(),
-        };
-        createdClient = client;
-
-        return {
+        const withClient: CRMState = {
           ...previous,
           clients: [client, ...previous.clients],
           activityEvents: [
@@ -1647,53 +1751,65 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
             ...previous.activityEvents,
           ],
         };
+
+        return applyStarterWorkoutState(withClient, client, starterWorkout);
       });
 
-      const createdClientSnapshot = createdClient as ClientProfile | null;
-      if (createdClientSnapshot) {
-        void refreshNutritionPlan({
-          clientId: createdClientSnapshot.id,
-          clientOverride: createdClientSnapshot,
-          trigger: "client-create",
-        }).catch(() => undefined);
-        void generateInitialWorkout({
-          clientId: createdClientSnapshot.id,
-          clientOverride: createdClientSnapshot,
-        });
-      }
+      void refreshNutritionPlan({
+        clientId: client.id,
+        clientOverride: client,
+        trigger: "client-create",
+      }).catch(() => undefined);
+      void generateInitialWorkout({
+        clientId: client.id,
+        clientOverride: client,
+      });
     },
     createClientFromLead: (leadId, input) => {
-      let createdClient: ClientProfile | null = null;
+      const snapshot = stateRef.current;
+      const lead = snapshot.leads.find((item) => item.id === leadId);
+      if (!lead) {
+        return;
+      }
+
+      if (
+        snapshot.clients.some(
+          (client) =>
+            client.email.toLowerCase() === input.email.toLowerCase() &&
+            client.email.toLowerCase() !== lead.email.toLowerCase(),
+        )
+      ) {
+        return;
+      }
+
+      const client: ClientProfile = {
+        id: `client-${crypto.randomUUID()}`,
+        originLeadId: leadId,
+        ...input,
+        joinedAt: timestamp(),
+        ownerId: snapshot.users[0]?.id ?? "user-maria",
+        avatarHue: randomHue(),
+      };
+      const starterWorkout = buildLocalStarterWorkout(client);
 
       applyCRMUpdate((previous) => {
-        const lead = previous.leads.find((item) => item.id === leadId);
-        if (!lead) {
+        const currentLead = previous.leads.find((item) => item.id === leadId);
+        if (!currentLead) {
           return previous;
         }
 
         if (
           previous.clients.some(
-            (client) =>
-              client.email.toLowerCase() === input.email.toLowerCase() &&
-              client.email.toLowerCase() !== lead.email.toLowerCase(),
+            (existingClient) =>
+              existingClient.email.toLowerCase() === input.email.toLowerCase() &&
+              existingClient.email.toLowerCase() !== currentLead.email.toLowerCase(),
           )
         ) {
           return previous;
         }
 
-        const client: ClientProfile = {
-          id: `client-${crypto.randomUUID()}`,
-          originLeadId: leadId,
-          ...input,
-          joinedAt: timestamp(),
-          ownerId: previous.users[0]?.id ?? "user-maria",
-          avatarHue: randomHue(),
-        };
-        createdClient = client;
-
         const now = timestamp();
-
-        return {
+        const withClient: CRMState = {
           ...previous,
           leads: previous.leads.map((item) =>
             item.id === leadId
@@ -1717,47 +1833,51 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
               actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
               clientId: client.id,
               type: "lead.converted",
-              detail: `Converted ${lead.fullName} into an active client profile.`,
+              detail: `Converted ${currentLead.fullName} into an active client profile.`,
               createdAt: now,
             },
             ...previous.activityEvents,
           ],
         };
+
+        return applyStarterWorkoutState(withClient, client, starterWorkout);
       });
 
-      const createdClientSnapshot = createdClient as ClientProfile | null;
-      if (createdClientSnapshot) {
-        void refreshNutritionPlan({
-          clientId: createdClientSnapshot.id,
-          clientOverride: createdClientSnapshot,
-          trigger: "client-create",
-        }).catch(() => undefined);
-        void generateInitialWorkout({
-          clientId: createdClientSnapshot.id,
-          clientOverride: createdClientSnapshot,
-        });
-      }
+      void refreshNutritionPlan({
+        clientId: client.id,
+        clientOverride: client,
+        trigger: "client-create",
+      }).catch(() => undefined);
+      void generateInitialWorkout({
+        clientId: client.id,
+        clientOverride: client,
+      });
     },
     updateClient: (clientId, input) => {
-      let updatedClient: ClientProfile | null = null;
+      const snapshot = stateRef.current;
+      const existingClient = snapshot.clients.find((client) => client.id === clientId);
+      if (!existingClient) {
+        return;
+      }
+
+      const updatedClient: ClientProfile = {
+        ...existingClient,
+        ...input,
+      };
 
       applyCRMUpdate((previous) => {
-        const existingClient = previous.clients.find((client) => client.id === clientId);
-        if (!existingClient) {
+        const currentClient = previous.clients.find((client) => client.id === clientId);
+        if (!currentClient) {
           return previous;
         }
 
         const now = timestamp();
-        updatedClient = {
-          ...existingClient,
-          ...input,
-        };
         const relatedLead = previous.leads.find(
           (lead) =>
-            lead.id === existingClient.originLeadId ||
-            (!existingClient.originLeadId &&
+            lead.id === currentClient.originLeadId ||
+            (!currentClient.originLeadId &&
               lead.status === "converted" &&
-              lead.email.toLowerCase() === existingClient.email.toLowerCase()),
+              lead.email.toLowerCase() === currentClient.email.toLowerCase()),
         );
 
         return {
@@ -1801,14 +1921,11 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         };
       });
 
-      const updatedClientSnapshot = updatedClient as ClientProfile | null;
-      if (updatedClientSnapshot) {
-        void refreshNutritionPlan({
-          clientId,
-          clientOverride: updatedClientSnapshot,
-          trigger: "profile-update",
-        });
-      }
+      void refreshNutritionPlan({
+        clientId,
+        clientOverride: updatedClient,
+        trigger: "profile-update",
+      });
     },
     deleteLead: async (leadId) => {
       const previous = stateRef.current;
@@ -2292,61 +2409,53 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         };
       }),
     addBodyAssessment: (input) => {
-      let assessmentSnapshot: BodyAssessment | null = null;
-      let priorAssessments: BodyAssessment[] = [];
+      const snapshot = stateRef.current;
+      const priorAssessments = snapshot.bodyAssessments.filter(
+        (assessment) => assessment.clientId === input.clientId,
+      );
+      const metrics = input.metrics
+        .filter((metric) => metric.label.trim() && metric.unit.trim())
+        .map((metric) => ({
+          id: `metric-${crypto.randomUUID()}`,
+          label: metric.label.trim(),
+          unit: metric.unit.trim(),
+          value: metric.value,
+        }));
 
-      applyCRMUpdate((previous) => {
-        priorAssessments = previous.bodyAssessments.filter(
-          (assessment) => assessment.clientId === input.clientId,
-        );
-        const metrics = input.metrics
-          .filter((metric) => metric.label.trim() && metric.unit.trim())
-          .map((metric) => ({
-            id: `metric-${crypto.randomUUID()}`,
-            label: metric.label.trim(),
-            unit: metric.unit.trim(),
-            value: metric.value,
-          }));
-
-        if (metrics.length === 0) {
-          return previous;
-        }
-
-        const nextAssessment: BodyAssessment = {
-          id: `ba-${crypto.randomUUID()}`,
-          clientId: input.clientId,
-          recordedAt: input.recordedAt,
-          recordedBy: previous.users[0]?.id ?? "user-maria",
-          notes: input.notes,
-          metrics,
-        };
-        assessmentSnapshot = nextAssessment;
-
-        return {
-          ...previous,
-          bodyAssessments: [nextAssessment, ...previous.bodyAssessments],
-          activityEvents: [
-            {
-              id: `act-${crypto.randomUUID()}`,
-              actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
-              clientId: input.clientId,
-              type: "assessment.created",
-              detail: `Recorded a new body assessment entry.`,
-              createdAt: timestamp(),
-            },
-            ...previous.activityEvents,
-          ],
-        };
-      });
-
-      const assessmentToRefresh = assessmentSnapshot as BodyAssessment | null;
-      if (assessmentToRefresh) {
-        void refreshNutritionPlan({
-          clientId: input.clientId,
-          assessmentsOverride: [assessmentToRefresh, ...priorAssessments],
-          trigger: "assessment-update",
-        });
+      if (metrics.length === 0) {
+        return;
       }
+
+      const nextAssessment: BodyAssessment = {
+        id: `ba-${crypto.randomUUID()}`,
+        clientId: input.clientId,
+        recordedAt: input.recordedAt,
+        recordedBy: snapshot.users[0]?.id ?? "user-maria",
+        notes: input.notes,
+        metrics,
+      };
+
+      applyCRMUpdate((previous) => ({
+        ...previous,
+        bodyAssessments: [nextAssessment, ...previous.bodyAssessments],
+        activityEvents: [
+          {
+            id: `act-${crypto.randomUUID()}`,
+            actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
+            clientId: input.clientId,
+            type: "assessment.created",
+            detail: `Recorded a new body assessment entry.`,
+            createdAt: timestamp(),
+          },
+          ...previous.activityEvents,
+        ],
+      }));
+
+      void refreshNutritionPlan({
+        clientId: input.clientId,
+        assessmentsOverride: [nextAssessment, ...priorAssessments],
+        trigger: "assessment-update",
+      });
     },
     addWorkoutPlan: (input) =>
       applyCRMUpdate((previous) => {
@@ -2487,21 +2596,25 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         };
       }),
     convertLeadToClient: (leadId) => {
-      let createdClient: ClientProfile | null = null;
+      const snapshot = stateRef.current;
+      const lead = snapshot.leads.find((item) => item.id === leadId);
+      if (!lead || snapshot.clients.some((client) => client.email === lead.email)) {
+        return;
+      }
+
+      const client = {
+        ...buildClientProfileFromLead(lead, snapshot.users[0]?.id ?? "user-maria"),
+        id: `client-${lead.id.replace("lead-", "")}`,
+      };
+      const starterWorkout = buildLocalStarterWorkout(client);
 
       applyCRMUpdate((previous) => {
-        const lead = previous.leads.find((item) => item.id === leadId);
-        if (!lead || previous.clients.some((client) => client.email === lead.email)) {
+        const currentLead = previous.leads.find((item) => item.id === leadId);
+        if (!currentLead || previous.clients.some((existingClient) => existingClient.email === currentLead.email)) {
           return previous;
         }
 
-        const client = {
-          ...buildClientProfileFromLead(lead, previous.users[0]?.id ?? "user-maria"),
-          id: `client-${lead.id.replace("lead-", "")}`,
-        };
-        createdClient = client;
-
-        return {
+        const withClient: CRMState = {
           ...previous,
           leads: previous.leads.map((item) =>
             item.id === leadId ? { ...item, status: "converted" } : item,
@@ -2513,26 +2626,25 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
               actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
               clientId: client.id,
               type: "lead.converted",
-              detail: `Converted ${lead.fullName} into an active client profile.`,
+              detail: `Converted ${currentLead.fullName} into an active client profile.`,
               createdAt: timestamp(),
             },
             ...previous.activityEvents,
           ],
         };
+
+        return applyStarterWorkoutState(withClient, client, starterWorkout);
       });
 
-      const createdClientSnapshot = createdClient as ClientProfile | null;
-      if (createdClientSnapshot) {
-        void refreshNutritionPlan({
-          clientId: createdClientSnapshot.id,
-          clientOverride: createdClientSnapshot,
-          trigger: "client-create",
-        }).catch(() => undefined);
-        void generateInitialWorkout({
-          clientId: createdClientSnapshot.id,
-          clientOverride: createdClientSnapshot,
-        });
-      }
+      void refreshNutritionPlan({
+        clientId: client.id,
+        clientOverride: client,
+        trigger: "client-create",
+      }).catch(() => undefined);
+      void generateInitialWorkout({
+        clientId: client.id,
+        clientOverride: client,
+      });
     },
     updateLeadStatus: (leadId, status) =>
       applyCRMUpdate((previous) => ({
