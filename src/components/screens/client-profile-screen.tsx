@@ -285,6 +285,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     createWorkoutEntryForm(state.trainingLocations[0]?.name ?? ""),
   );
   const [workoutEntryError, setWorkoutEntryError] = useState<string | null>(null);
+  const [isWorkoutExerciseEditorOpen, setIsWorkoutExerciseEditorOpen] = useState(false);
   const [openWorkoutRecapId, setOpenWorkoutRecapId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -777,6 +778,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
 
     addWorkoutSession(input);
     setWorkoutEntryForm(createWorkoutEntryForm(state.trainingLocations[0]?.name ?? ""));
+    setIsWorkoutExerciseEditorOpen(false);
   }
 
   function updateWorkoutExercise(
@@ -810,6 +812,11 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
   }
 
   function addWorkoutExerciseField() {
+    if (!isWorkoutExerciseEditorOpen) {
+      setIsWorkoutExerciseEditorOpen(true);
+      return;
+    }
+
     setWorkoutEntryForm((current) => ({
       ...current,
       exercises: [...current.exercises, createWorkoutExerciseForm()],
@@ -1687,145 +1694,147 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                 />
               </DataLabel>
 
-              <div className="mt-5 space-y-4">
-                {workoutEntryForm.exercises.map((exercise, exerciseIndex) => (
-                  <div
-                    key={exercise.id}
-                    className="rounded-[22px] border border-[color:var(--line-soft)] bg-white/70 p-4"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="font-semibold text-[color:var(--ink)]">
-                        {t("fields.exerciseName")} {exerciseIndex + 1}
-                      </p>
-                      {workoutEntryForm.exercises.length > 1 ? (
+              {isWorkoutExerciseEditorOpen ? (
+                <div className="mt-5 space-y-4">
+                  {workoutEntryForm.exercises.map((exercise, exerciseIndex) => (
+                    <div
+                      key={exercise.id}
+                      className="rounded-[22px] border border-[color:var(--line-soft)] bg-white/70 p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="font-semibold text-[color:var(--ink)]">
+                          {t("fields.exerciseName")} {exerciseIndex + 1}
+                        </p>
+                        {workoutEntryForm.exercises.length > 1 ? (
+                          <button
+                            type="button"
+                            onClick={() => removeWorkoutExerciseField(exercise.id)}
+                            className="rounded-full border border-[color:var(--line-soft)] px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                          >
+                            {t("workout.removeExercise")}
+                          </button>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-4 grid gap-4 md:grid-cols-2">
+                        <DataLabel label={t("fields.exerciseName")}>
+                          <input
+                            list={`exercise-library-${clientId}`}
+                            value={exercise.name}
+                            onChange={(event) =>
+                              updateWorkoutExercise(exercise.id, { name: event.target.value })
+                            }
+                            className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                          />
+                        </DataLabel>
+                        <DataLabel label={t("fields.exerciseFocus")}>
+                          <input
+                            value={exercise.focus}
+                            onChange={(event) =>
+                              updateWorkoutExercise(exercise.id, { focus: event.target.value })
+                            }
+                            className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                          />
+                        </DataLabel>
+                      </div>
+
+                      <DataLabel label={t("workout.exerciseNote")}>
+                        <input
+                          value={exercise.note}
+                          onChange={(event) =>
+                            updateWorkoutExercise(exercise.id, { note: event.target.value })
+                          }
+                          className="mt-4 w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                        />
+                      </DataLabel>
+
+                      <div className="mt-4 space-y-3">
+                        {exercise.sets.map((set) => (
+                          <div key={set.id} className="rounded-2xl bg-[color:var(--sand-2)]/75 p-3">
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                              <p className="text-sm font-semibold text-[color:var(--ink)]">
+                                {t("workout.setColumn")} {set.label}
+                              </p>
+                              {exercise.sets.length > 1 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => removeWorkoutSetField(exercise.id, set.id)}
+                                  className="rounded-full border border-[color:var(--line-soft)] px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                                >
+                                  {t("workout.removeSet")}
+                                </button>
+                              ) : null}
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-[0.95fr_0.75fr_0.75fr_0.75fr]">
+                              <DataLabel label={t("fields.setReps")}>
+                                <input
+                                  value={set.reps}
+                                  onChange={(event) =>
+                                    updateWorkoutSet(exercise.id, set.id, {
+                                      reps: event.target.value,
+                                    })
+                                  }
+                                  className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                                />
+                              </DataLabel>
+                              <DataLabel label={t("fields.setWeight")}>
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  value={set.weightKg}
+                                  onChange={(event) =>
+                                    updateWorkoutSet(exercise.id, set.id, {
+                                      weightKg: event.target.value,
+                                    })
+                                  }
+                                  className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                                />
+                              </DataLabel>
+                              <DataLabel label={t("fields.setTempo")}>
+                                <input
+                                  value={set.tempo}
+                                  onChange={(event) =>
+                                    updateWorkoutSet(exercise.id, set.id, {
+                                      tempo: event.target.value,
+                                    })
+                                  }
+                                  className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                                />
+                              </DataLabel>
+                              <DataLabel label={t("workout.rpe")}>
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  min="1"
+                                  max="10"
+                                  value={set.rpe}
+                                  onChange={(event) =>
+                                    updateWorkoutSet(exercise.id, set.id, {
+                                      rpe: event.target.value,
+                                    })
+                                  }
+                                  className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
+                                />
+                              </DataLabel>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-3">
                         <button
                           type="button"
-                          onClick={() => removeWorkoutExerciseField(exercise.id)}
-                          className="rounded-full border border-[color:var(--line-soft)] px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                          onClick={() => addWorkoutSetField(exercise.id)}
+                          className="rounded-full border border-[color:var(--line-soft)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
                         >
-                          {t("workout.removeExercise")}
+                          {t("workout.addSet")}
                         </button>
-                      ) : null}
+                      </div>
                     </div>
-
-                    <div className="mt-4 grid gap-4 md:grid-cols-2">
-                      <DataLabel label={t("fields.exerciseName")}>
-                        <input
-                          list={`exercise-library-${clientId}`}
-                          value={exercise.name}
-                          onChange={(event) =>
-                            updateWorkoutExercise(exercise.id, { name: event.target.value })
-                          }
-                          className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-                        />
-                      </DataLabel>
-                      <DataLabel label={t("fields.exerciseFocus")}>
-                        <input
-                          value={exercise.focus}
-                          onChange={(event) =>
-                            updateWorkoutExercise(exercise.id, { focus: event.target.value })
-                          }
-                          className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-                        />
-                      </DataLabel>
-                    </div>
-
-                    <DataLabel label={t("workout.exerciseNote")}>
-                      <input
-                        value={exercise.note}
-                        onChange={(event) =>
-                          updateWorkoutExercise(exercise.id, { note: event.target.value })
-                        }
-                        className="mt-4 w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-                      />
-                    </DataLabel>
-
-                    <div className="mt-4 space-y-3">
-                      {exercise.sets.map((set) => (
-                        <div key={set.id} className="rounded-2xl bg-[color:var(--sand-2)]/75 p-3">
-                          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                            <p className="text-sm font-semibold text-[color:var(--ink)]">
-                              {t("workout.setColumn")} {set.label}
-                            </p>
-                            {exercise.sets.length > 1 ? (
-                              <button
-                                type="button"
-                                onClick={() => removeWorkoutSetField(exercise.id, set.id)}
-                                className="rounded-full border border-[color:var(--line-soft)] px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
-                              >
-                                {t("workout.removeSet")}
-                              </button>
-                            ) : null}
-                          </div>
-
-                          <div className="grid gap-3 md:grid-cols-[0.95fr_0.75fr_0.75fr_0.75fr]">
-                            <DataLabel label={t("fields.setReps")}>
-                              <input
-                                value={set.reps}
-                                onChange={(event) =>
-                                  updateWorkoutSet(exercise.id, set.id, {
-                                    reps: event.target.value,
-                                  })
-                                }
-                                className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-                              />
-                            </DataLabel>
-                            <DataLabel label={t("fields.setWeight")}>
-                              <input
-                                type="number"
-                                step="0.5"
-                                value={set.weightKg}
-                                onChange={(event) =>
-                                  updateWorkoutSet(exercise.id, set.id, {
-                                    weightKg: event.target.value,
-                                  })
-                                }
-                                className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-                              />
-                            </DataLabel>
-                            <DataLabel label={t("fields.setTempo")}>
-                              <input
-                                value={set.tempo}
-                                onChange={(event) =>
-                                  updateWorkoutSet(exercise.id, set.id, {
-                                    tempo: event.target.value,
-                                  })
-                                }
-                                className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-                              />
-                            </DataLabel>
-                            <DataLabel label={t("workout.rpe")}>
-                              <input
-                                type="number"
-                                step="0.5"
-                                min="1"
-                                max="10"
-                                value={set.rpe}
-                                onChange={(event) =>
-                                  updateWorkoutSet(exercise.id, set.id, {
-                                    rpe: event.target.value,
-                                  })
-                                }
-                                className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-                              />
-                            </DataLabel>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <button
-                        type="button"
-                        onClick={() => addWorkoutSetField(exercise.id)}
-                        className="rounded-full border border-[color:var(--line-soft)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
-                      >
-                        {t("workout.addSet")}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : null}
 
               <div className="mt-4 flex flex-wrap gap-3">
                 <button
@@ -1843,12 +1852,14 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                 </div>
               ) : null}
 
-              <button
-                type="submit"
-                className="mt-4 rounded-full bg-[color:var(--ink)] px-5 py-3 text-sm font-semibold text-white"
-              >
-                {t("forms.workoutSessionSubmit")}
-              </button>
+              {isWorkoutExerciseEditorOpen ? (
+                <button
+                  type="submit"
+                  className="mt-4 rounded-full bg-[color:var(--ink)] px-5 py-3 text-sm font-semibold text-white"
+                >
+                  {t("forms.workoutSessionSubmit")}
+                </button>
+              ) : null}
             </form>
           </div>
         </div>
