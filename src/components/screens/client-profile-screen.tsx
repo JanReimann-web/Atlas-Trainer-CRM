@@ -176,8 +176,6 @@ function createWorkoutEntryForm(defaultLocation = "") {
     durationMinutes: "60",
     kind: "solo",
     location: defaultLocation,
-    packagePurchaseId: "",
-    coachNote: "",
     sessionNote: "",
     exercises: [createWorkoutExerciseForm()],
   };
@@ -790,8 +788,6 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
       kind: workoutEntryForm.kind as CreateWorkoutSessionInput["kind"],
       status: workoutEntryForm.status as CreateWorkoutSessionInput["status"],
       location: workoutEntryForm.location.trim(),
-      packagePurchaseId: workoutEntryForm.packagePurchaseId || undefined,
-      coachNote: workoutEntryForm.coachNote.trim(),
       sessionNote: workoutEntryForm.sessionNote.trim(),
       exercises,
     };
@@ -1309,9 +1305,8 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
               className="rounded-[24px] border border-[color:var(--line-soft)] bg-[color:var(--sand-2)]/55 p-4"
               onSubmit={submitPackage}
             >
-              <div className="mb-4 space-y-1">
+              <div className="mb-4">
                 <p className="font-semibold text-[color:var(--ink)]">{t("forms.purchaseTitle")}</p>
-                <p className="text-sm leading-6 text-[color:var(--muted-ink)]">{t("forms.purchaseSubtitle")}</p>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -1468,7 +1463,6 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
 
       <SectionCard
         title={t("clientProfile.workouts")}
-        subtitle={t("clientProfile.workoutSectionSubtitle")}
         help={t("help.workoutPlan")}
       >
         <datalist id={`exercise-library-${clientId}`}>
@@ -1481,12 +1475,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
           <div className="space-y-4">
             <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-[color:var(--ink)]">{t("clientProfile.workoutBlocks")}</p>
-                  <p className="mt-1 text-sm leading-6 text-[color:var(--muted-ink)]">
-                    {activePlan ? activePlan.goal : t("clientProfile.coachConfirmBlock")}
-                  </p>
-                </div>
+                <p className="font-semibold text-[color:var(--ink)]">{t("clientProfile.workoutBlocks")}</p>
                 {activePlan ? <StatusBadge status={activePlan.status} /> : null}
               </div>
 
@@ -1579,11 +1568,8 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
               className="rounded-[24px] border border-[color:var(--line-soft)] bg-[color:var(--sand-2)]/55 p-4"
               onSubmit={submitWorkoutEntry}
             >
-              <div className="mb-4 space-y-1">
+              <div className="mb-4">
                 <p className="font-semibold text-[color:var(--ink)]">{t("forms.workoutSessionTitle")}</p>
-                <p className="text-sm leading-6 text-[color:var(--muted-ink)]">
-                  {t("forms.workoutSessionSubtitle")}
-                </p>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -1707,48 +1693,6 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                       setWorkoutEntryForm((current) => ({
                         ...current,
                         durationMinutes: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-                  />
-                </DataLabel>
-              </div>
-
-              <div className="mt-4 grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
-                <DataLabel label={t("fields.packagePurchase")}>
-                  <select
-                    value={workoutEntryForm.packagePurchaseId}
-                    onChange={(event) =>
-                      setWorkoutEntryForm((current) => ({
-                        ...current,
-                        packagePurchaseId: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
-                  >
-                    <option value="">{t("common.none")}</option>
-                    {purchases.map((purchase) => {
-                      const template = getPackageTemplate(state, purchase.templateId);
-                      const purchaseOwner =
-                        purchase.clientId !== clientId ? getClient(state, purchase.clientId) : null;
-                      return (
-                        <option key={purchase.id} value={purchase.id}>
-                          {template?.name} ({getRemainingUnits(purchase)})
-                          {purchaseOwner
-                            ? ` / ${t("clientProfile.sharedPurchasePaidBy")} ${purchaseOwner.fullName}`
-                            : ""}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </DataLabel>
-                <DataLabel label={t("workout.coachNotes")}>
-                  <input
-                    value={workoutEntryForm.coachNote}
-                    onChange={(event) =>
-                      setWorkoutEntryForm((current) => ({
-                        ...current,
-                        coachNote: event.target.value,
                       }))
                     }
                     className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
@@ -1974,9 +1918,8 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
             className="rounded-[24px] border border-[color:var(--line-soft)] bg-[color:var(--sand-2)]/55 p-4"
             onSubmit={submitAssessment}
           >
-            <div className="mb-4 space-y-1">
+            <div className="mb-4">
               <p className="font-semibold text-[color:var(--ink)]">{t("forms.assessmentTitle")}</p>
-              <p className="text-sm leading-6 text-[color:var(--muted-ink)]">{t("forms.assessmentSubtitle")}</p>
             </div>
 
             <DataLabel label={t("fields.assessmentDate")}>
@@ -2076,7 +2019,6 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
 
       <SectionCard
         title={t("plans.nutritionPlan")}
-        subtitle={t("clientProfile.nutritionAutoSubtitle")}
         aside={
           isNutritionRefreshing ? (
             <span className="rounded-full bg-[color:var(--sand-2)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)]">
@@ -2106,27 +2048,9 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
             </div>
 
             <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.24em] text-[color:var(--muted-ink)]">
-                    {t("clientProfile.nutritionRecommendation")}
-                  </p>
-                  <h3 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">
-                    {nutritionPlan.title}
-                  </h3>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="rounded-full bg-[color:var(--sand-2)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--ink)]">
-                    AI
-                  </span>
-                  <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--muted-ink)]">
-                    {formatDate(nutritionPlan.updatedAt, {
-                      day: "2-digit",
-                      month: "short",
-                    })}
-                  </p>
-                </div>
-              </div>
+              <h3 className="text-xl font-semibold text-[color:var(--ink)]">
+                {nutritionPlan.title}
+              </h3>
 
               <p className="mt-4 text-sm leading-7 text-[color:var(--ink)]">
                 {nutritionPlan.coachRecommendation}
@@ -2165,7 +2089,6 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
 
       <SectionCard
         title={t("clientProfile.workoutRecaps")}
-        subtitle={t("clientProfile.workoutRecapsSubtitle")}
       >
         <div className="space-y-3">
           {workoutRecaps.length === 0 ? (
