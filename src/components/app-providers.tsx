@@ -25,6 +25,7 @@ import {
   StorageReference,
 } from "firebase/storage";
 import { isAllowedEmail, normalizeEmail } from "@/lib/auth/allowed-emails";
+import { AppRole, getRoleForEmail } from "@/lib/auth/roles";
 import { addMinutesToIso, buildIsoFromDateTime } from "@/lib/date";
 import { getFirebaseServices, isFirebaseConfigured } from "@/lib/firebase/client";
 import { saveCRMState, subscribeToCRMState } from "@/lib/firebase/crm-store";
@@ -75,6 +76,7 @@ type LocaleContextValue = {
 
 type AuthContextValue = {
   user: FirebaseAuthUser | null;
+  role: AppRole | null;
   loading: boolean;
   error: string | null;
   firebaseConfigured: boolean;
@@ -1590,6 +1592,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   const firebaseConfigured = isFirebaseConfigured();
   const [locale, setLocaleState] = useState<Locale>("en");
   const [authUser, setAuthUser] = useState<FirebaseAuthUser | null>(null);
+  const authRole = getRoleForEmail(authUser?.email);
   const [authLoading, setAuthLoading] = useState(firebaseConfigured);
   const [authError, setAuthError] = useState<string | null>(null);
   const [state, setState] = useState<CRMState>(() => loadInitialState(firebaseConfigured));
@@ -1762,6 +1765,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
   const authValue: AuthContextValue = {
     user: authUser,
+    role: authRole,
     loading: authLoading || crmLoading,
     error: authError,
     firebaseConfigured,

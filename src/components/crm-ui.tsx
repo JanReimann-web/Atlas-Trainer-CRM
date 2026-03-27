@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth, useCRM, useLocaleContext } from "@/components/app-providers";
+import { canAccessPath } from "@/lib/auth/roles";
 import { getUpcomingSessions } from "@/lib/selectors";
 
 export function InfoHint({ content }: { content: string }) {
@@ -322,8 +323,9 @@ export function LanguageToggle({
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { state } = useCRM();
-  const { user, signOutUser } = useAuth();
+  const { user, role, signOutUser } = useAuth();
   const { t, formatDate } = useLocaleContext();
   const nextSession = useMemo(() => getUpcomingSessions(state, 1)[0], [state]);
 
@@ -336,6 +338,20 @@ export function AppShell({ children }: { children: ReactNode }) {
     { href: "/settings", label: t("nav.settings") },
     { href: "/activity", label: t("nav.activity") },
   ];
+  const visibleNavItems = role
+    ? navItems.filter((item) => canAccessPath(role, item.href))
+    : navItems;
+  const blockedPath = Boolean(role && !canAccessPath(role, pathname));
+
+  useEffect(() => {
+    if (blockedPath) {
+      router.replace("/");
+    }
+  }, [blockedPath, router]);
+
+  if (blockedPath) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-[color:var(--background)] text-[color:var(--ink)]">
@@ -371,7 +387,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             ) : null}
 
             <nav className="space-y-2">
-              {navItems.map((item) => {
+              {visibleNavItems.map((item) => {
                 const active = pathname === item.href;
                 return (
                   <Link
@@ -446,7 +462,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <nav className="panel-surface fixed bottom-3 left-3 right-3 z-30 overflow-x-auto rounded-[28px] px-3 py-2 lg:hidden">
         <div className="flex min-w-max items-center gap-2">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const active = pathname === item.href;
             return (
               <Link
