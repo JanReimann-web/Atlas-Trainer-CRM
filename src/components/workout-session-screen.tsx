@@ -20,8 +20,6 @@ import { getDateInputValueFromIso, getTimeInputValueFromIso } from "@/lib/date";
 import { Session, TrainingLocation } from "@/lib/types";
 import { PageLead } from "@/components/screens/shared";
 
-type DraftKind = "workout-summary" | "next-session";
-
 function durationInputFromSession(startAt?: string, endAt?: string) {
   if (!startAt || !endAt) {
     return "60";
@@ -259,9 +257,6 @@ export function WorkoutSessionScreen({
   const summaryDraft = [...state.aiDrafts]
     .filter((draft) => draft.sessionId === sessionId && draft.type === "workout-summary")
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
-  const nextDraft = [...state.aiDrafts]
-    .filter((draft) => draft.sessionId === sessionId && draft.type === "next-session")
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
   const subtitleParts = [
     client.fullName,
     session.startAt ? formatDate(session.startAt) : t("common.noDateYet"),
@@ -295,9 +290,8 @@ export function WorkoutSessionScreen({
     }
   }
 
-  async function generateDraft(kind: DraftKind) {
-    const endpoint =
-      kind === "workout-summary" ? "/api/ai/workout-summary" : "/api/ai/next-session";
+  async function generateDraft() {
+    const endpoint = "/api/ai/workout-summary";
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -612,19 +606,12 @@ export function WorkoutSessionScreen({
 
           <SectionCard title={t("workout.aiTools")} help={t("help.aiDrafts")}>
             <div className="grid gap-3">
-              <button
-                type="button"
-                onClick={() => void generateDraft("workout-summary")}
-                className="rounded-[22px] bg-[color:var(--ink)] px-4 py-4 text-sm font-semibold text-white"
-              >
+                <button
+                  type="button"
+                  onClick={() => void generateDraft()}
+                  className="rounded-[22px] bg-[color:var(--ink)] px-4 py-4 text-sm font-semibold text-white"
+                >
                 {isPending ? "..." : t("workout.recapDraft")}
-              </button>
-              <button
-                type="button"
-                onClick={() => void generateDraft("next-session")}
-                className="rounded-[22px] bg-[color:var(--clay)] px-4 py-4 text-sm font-semibold text-white"
-              >
-                {isPending ? "..." : t("workout.nextDraft")}
               </button>
             </div>
           </SectionCard>
@@ -642,20 +629,7 @@ export function WorkoutSessionScreen({
             />
           ) : null}
 
-          {nextDraft ? (
-            <DraftEditor
-              title={nextDraft.title}
-              draftId={nextDraft.id}
-              subject={nextDraft.subject}
-              body={nextDraft.body}
-              internalNote={nextDraft.internalNote}
-              onChange={(draftId, patch) => updateDraft(draftId, patch)}
-              onSend={(draftId) => sendDraftToTimeline(draftId)}
-              sendLabel={t("workout.emailLog")}
-            />
-          ) : null}
-
-          {!summaryDraft && !nextDraft ? (
+          {!summaryDraft ? (
             <EmptyState title={t("common.none")} body={t("workout.emptyDraft")} />
           ) : null}
         </div>

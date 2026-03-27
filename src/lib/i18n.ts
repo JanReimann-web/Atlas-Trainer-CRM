@@ -502,6 +502,9 @@ const messages: Record<Locale, DictionaryTree> = {
       active: "Active",
       archived: "Archived",
       live: "Live",
+      modified: "Performed",
+      added: "Added",
+      skipped: "Skipped",
     },
   },
   et: {
@@ -995,6 +998,9 @@ const messages: Record<Locale, DictionaryTree> = {
       active: "Aktiivne",
       archived: "Arhiveeritud",
       live: "Live",
+      modified: "Sooritatud",
+      added: "Lisatud",
+      skipped: "Vahele jäetud",
     },
   },
 };
