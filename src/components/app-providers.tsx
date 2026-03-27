@@ -107,7 +107,7 @@ type CRMContextValue = {
   ) => CatalogMutationResult;
   deleteTrainingLocation: (locationId: string) => CatalogMutationResult;
   addPackagePurchase: (input: CreatePackagePurchaseInput) => void;
-  addBodyAssessment: (input: CreateBodyAssessmentInput) => void;
+  addBodyAssessment: (input: CreateBodyAssessmentInput) => BodyAssessment | null;
   addWorkoutPlan: (input: CreateWorkoutPlanInput) => void;
   addWorkoutSession: (input: CreateWorkoutSessionInput) => void;
   updateSessionSchedule: (args: {
@@ -147,7 +147,7 @@ type CRMContextValue = {
     clientId: string;
     clientOverride?: ClientProfile;
     assessmentsOverride?: BodyAssessment[];
-    trigger?: "manual" | "profile-update" | "assessment-update" | "client-create";
+    trigger?: "assessment-update" | "assessment-backfill";
   }) => Promise<void>;
   upsertDraft: (draft: AIDraft) => void;
   updateDraft: (draftId: string, patch: Partial<AIDraft>) => void;
@@ -1266,22 +1266,14 @@ function formatAuthError(locale: Locale, error: unknown) {
 }
 
 function describeNutritionRefreshTrigger(
-  trigger: "manual" | "profile-update" | "assessment-update" | "client-create",
+  trigger: "assessment-update" | "assessment-backfill",
   clientName: string,
 ) {
-  if (trigger === "manual") {
-    return `Generated AI nutrition guidance for ${clientName}.`;
-  }
-
   if (trigger === "assessment-update") {
     return `Refreshed AI nutrition guidance for ${clientName} after a body assessment update.`;
   }
 
-  if (trigger === "client-create") {
-    return `Generated initial AI nutrition guidance for ${clientName}.`;
-  }
-
-  return `Refreshed AI nutrition guidance for ${clientName} after a profile update.`;
+  return `Generated AI nutrition guidance for ${clientName} from the latest body assessment.`;
 }
 
 function isStorageMissingError(error: unknown) {
@@ -1508,6 +1500,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   const [crmError, setCrmError] = useState<string | null>(null);
   const saveQueueRef = useRef(Promise.resolve());
   const stateRef = useRef(state);
+  const nutritionRefreshInFlightRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const storedLocale = localStorage.getItem(LOCALE_STORAGE_KEY);
@@ -1766,12 +1759,12 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     clientId,
     clientOverride,
     assessmentsOverride,
-    trigger = "manual",
+    trigger = "assessment-update",
   }: {
     clientId: string;
     clientOverride?: ClientProfile;
     assessmentsOverride?: BodyAssessment[];
-    trigger?: "manual" | "profile-update" | "assessment-update" | "client-create";
+    trigger?: "assessment-update" | "assessment-backfill";
   }) {
     const snapshot = stateRef.current;
     const client =
@@ -1782,10 +1775,20 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
     const recentAssessments =
       assessmentsOverride ?? getClientAssessments(snapshot, clientId);
+    if (recentAssessments.length === 0) {
+      return;
+    }
+
+    if (nutritionRefreshInFlightRef.current.has(clientId)) {
+      return;
+    }
+
     const recentSessions = getClientSessions(snapshot, clientId);
     const currentNutritionPlan =
       getClientNutritionPlans(snapshot, clientId).find((plan) => plan.status === "active") ??
       null;
+
+    nutritionRefreshInFlightRef.current.add(clientId);
 
     try {
       const response = await fetch("/api/ai/nutrition-plan", {
@@ -1868,6 +1871,8 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           : "Nutrition plan generation failed.";
       setCrmError(message);
       throw error;
+    } finally {
+      nutritionRefreshInFlightRef.current.delete(clientId);
     }
   }
 
@@ -2225,11 +2230,6 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         return applyStarterWorkoutState(withClient, client, starterWorkout);
       });
 
-      void refreshNutritionPlan({
-        clientId: client.id,
-        clientOverride: client,
-        trigger: "client-create",
-      }).catch(() => undefined);
       void generateInitialWorkout({
         clientId: client.id,
         clientOverride: client,
@@ -2313,11 +2313,6 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         return applyStarterWorkoutState(withClient, client, starterWorkout);
       });
 
-      void refreshNutritionPlan({
-        clientId: client.id,
-        clientOverride: client,
-        trigger: "client-create",
-      }).catch(() => undefined);
       void generateInitialWorkout({
         clientId: client.id,
         clientOverride: client,
@@ -2329,11 +2324,6 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       if (!existingClient) {
         return;
       }
-
-      const updatedClient: ClientProfile = {
-        ...existingClient,
-        ...input,
-      };
 
       applyCRMUpdate((previous) => {
         const currentClient = previous.clients.find((client) => client.id === clientId);
@@ -2391,11 +2381,6 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         };
       });
 
-      void refreshNutritionPlan({
-        clientId,
-        clientOverride: updatedClient,
-        trigger: "profile-update",
-      });
     },
     deleteLead: async (leadId) => {
       const previous = stateRef.current;
@@ -2880,9 +2865,6 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       }),
     addBodyAssessment: (input) => {
       const snapshot = stateRef.current;
-      const priorAssessments = snapshot.bodyAssessments.filter(
-        (assessment) => assessment.clientId === input.clientId,
-      );
       const metrics = input.metrics
         .filter((metric) => metric.label.trim() && metric.unit.trim())
         .map((metric) => ({
@@ -2893,7 +2875,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         }));
 
       if (metrics.length === 0) {
-        return;
+        return null;
       }
 
       const nextAssessment: BodyAssessment = {
@@ -2920,12 +2902,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           ...previous.activityEvents,
         ],
       }));
-
-      void refreshNutritionPlan({
-        clientId: input.clientId,
-        assessmentsOverride: [nextAssessment, ...priorAssessments],
-        trigger: "assessment-update",
-      });
+      return nextAssessment;
     },
     addWorkoutPlan: (input) =>
       applyCRMUpdate((previous) => {
@@ -3106,11 +3083,6 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         return applyStarterWorkoutState(withClient, client, starterWorkout);
       });
 
-      void refreshNutritionPlan({
-        clientId: client.id,
-        clientOverride: client,
-        trigger: "client-create",
-      }).catch(() => undefined);
       void generateInitialWorkout({
         clientId: client.id,
         clientOverride: client,

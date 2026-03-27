@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useCRM, useLocaleContext } from "@/components/app-providers";
 import {
   DataLabel,
@@ -219,6 +219,38 @@ function createPackageForm(templateId = "", templatePrice = 0): PackageForm {
   };
 }
 
+function NutritionMetricCard({
+  label,
+  value,
+  detail,
+  mealBreakdown,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  mealBreakdown: Array<{ label: string; value: string }>;
+}) {
+  return (
+    <div className="panel-surface min-w-0 rounded-[24px] p-4 sm:rounded-[28px] sm:p-5">
+      <p className="text-[11px] uppercase tracking-[0.2em] text-[color:var(--muted-ink)] sm:text-xs sm:tracking-[0.28em]">
+        {label}
+      </p>
+      <p className="mt-3 break-words font-display text-[clamp(2.6rem,12vw,3.3rem)] text-[color:var(--ink)] sm:text-4xl">
+        {value}
+      </p>
+      <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">{detail}</p>
+      <div className="mt-3 space-y-1.5 text-xs leading-5 text-[color:var(--muted-ink)]">
+        {mealBreakdown.map((meal) => (
+          <div key={meal.label} className="flex items-center justify-between gap-3">
+            <span>{meal.label}</span>
+            <span className="font-semibold text-[color:var(--ink)]">{meal.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ClientProfileScreen({ clientId }: { clientId: string }) {
   const {
     state,
@@ -229,6 +261,8 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     refreshNutritionPlan,
   } = useCRM();
   const { t, locale, formatDate, formatCurrency } = useLocaleContext();
+  const refreshNutritionPlanRef = useRef(refreshNutritionPlan);
+  const nutritionBootstrapAttemptRef = useRef<Set<string>>(new Set());
   const client = getClient(state, clientId);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState(() => buildClientProfileForm(client));
@@ -252,6 +286,10 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     createWorkoutEntryForm(state.trainingLocations[0]?.name ?? ""),
   );
   const [workoutEntryError, setWorkoutEntryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    refreshNutritionPlanRef.current = refreshNutritionPlan;
+  }, [refreshNutritionPlan]);
 
   useEffect(() => {
     const fallbackTemplate = state.packageTemplates[0];
@@ -314,10 +352,6 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     );
   }, [state.trainingLocations]);
 
-  if (!client) {
-    return <EmptyState title={t("clientProfile.missingTitle")} body={t("clientProfile.missingBody")} />;
-  }
-
   const purchases = getClientPurchases(state, clientId);
   const assessments = getClientAssessments(state, clientId);
   const sessions = getClientSessions(state, clientId);
@@ -366,6 +400,72 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
         },
       ]
     : [];
+  const localeTag = locale === "et" ? "et-EE" : "en-GB";
+  const formatMealAmount = (value: number, unit: "kcal" | "g" | "l") => {
+    const shouldUseFraction = unit === "l" && !Number.isInteger(value);
+    const formatted = new Intl.NumberFormat(localeTag, {
+      minimumFractionDigits: shouldUseFraction ? 1 : 0,
+      maximumFractionDigits: shouldUseFraction ? 1 : 0,
+    }).format(value);
+    return `${formatted} ${unit}`;
+  };
+  const nutritionMetricCards = nutritionPlan
+    ? [
+        {
+          key: "calories",
+          label: t("clientProfile.nutritionCalories"),
+          value: String(nutritionPlan.calories),
+          detail: t("clientProfile.nutritionPerDay"),
+          mealBreakdown: mealDistribution.map((meal) => ({
+            label: meal.label,
+            value: `~${formatMealAmount(Math.round((nutritionPlan.calories * meal.share) / 100), "kcal")}`,
+          })),
+        },
+        {
+          key: "protein",
+          label: t("clientProfile.nutritionProtein"),
+          value: String(nutritionPlan.proteinGrams),
+          detail: t("clientProfile.nutritionGrams"),
+          mealBreakdown: mealDistribution.map((meal) => ({
+            label: meal.label,
+            value: `~${formatMealAmount(Math.round((nutritionPlan.proteinGrams * meal.share) / 100), "g")}`,
+          })),
+        },
+        {
+          key: "carbs",
+          label: t("clientProfile.nutritionCarbs"),
+          value: String(nutritionPlan.carbsGrams),
+          detail: t("clientProfile.nutritionGrams"),
+          mealBreakdown: mealDistribution.map((meal) => ({
+            label: meal.label,
+            value: `~${formatMealAmount(Math.round((nutritionPlan.carbsGrams * meal.share) / 100), "g")}`,
+          })),
+        },
+        {
+          key: "fats",
+          label: t("clientProfile.nutritionFats"),
+          value: String(nutritionPlan.fatsGrams),
+          detail: t("clientProfile.nutritionGrams"),
+          mealBreakdown: mealDistribution.map((meal) => ({
+            label: meal.label,
+            value: `~${formatMealAmount(Math.round((nutritionPlan.fatsGrams * meal.share) / 100), "g")}`,
+          })),
+        },
+        {
+          key: "hydration",
+          label: t("clientProfile.nutritionHydration"),
+          value: String(nutritionPlan.hydrationLiters),
+          detail: t("clientProfile.nutritionLiters"),
+          mealBreakdown: mealDistribution.map((meal) => ({
+            label: meal.label,
+            value: `~${formatMealAmount(
+              Math.round(((nutritionPlan.hydrationLiters * meal.share) / 100) * 10) / 10,
+              "l",
+            )}`,
+          })),
+        },
+      ]
+    : [];
   const selectedPackageTemplate =
     state.packageTemplates.find((template) => template.id === packageForm.templateId) ?? null;
   const availableSharedClients = state.clients
@@ -385,6 +485,40 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
         .map((linkedClientId) => getClient(state, linkedClientId)?.fullName)
         .filter(Boolean)
     : [];
+
+  useEffect(() => {
+    if (!client || nutritionPlan || assessments.length === 0) {
+      return;
+    }
+
+    if (nutritionBootstrapAttemptRef.current.has(client.id)) {
+      return;
+    }
+
+    nutritionBootstrapAttemptRef.current.add(client.id);
+    setNutritionError(null);
+    setIsNutritionRefreshing(true);
+
+    void refreshNutritionPlanRef
+      .current({
+        clientId: client.id,
+        assessmentsOverride: assessments,
+        trigger: "assessment-backfill",
+      })
+      .catch((error) => {
+        setNutritionError(
+          error instanceof Error ? error.message : t("clientProfile.nutritionGenerationFailed"),
+        );
+      })
+      .finally(() => {
+        nutritionBootstrapAttemptRef.current.delete(client.id);
+        setIsNutritionRefreshing(false);
+      });
+  }, [assessments, client, nutritionPlan, t]);
+
+  if (!client) {
+    return <EmptyState title={t("clientProfile.missingTitle")} body={t("clientProfile.missingBody")} />;
+  }
 
   function setPackageTemplate(templateId: string) {
     const nextTemplate = state.packageTemplates.find((template) => template.id === templateId);
@@ -412,24 +546,6 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
 
   function setPackagePaymentMethod(paymentMethod: PaymentMethod) {
     setPackageForm((current) => ({ ...current, paymentMethod }));
-  }
-
-  async function handleManualNutritionRefresh() {
-    setNutritionError(null);
-    setIsNutritionRefreshing(true);
-
-    try {
-      await refreshNutritionPlan({
-        clientId,
-        trigger: "manual",
-      });
-    } catch (error) {
-      setNutritionError(
-        error instanceof Error ? error.message : t("clientProfile.nutritionGenerationFailed"),
-      );
-    } finally {
-      setIsNutritionRefreshing(false);
-    }
   }
 
   function submitProfile(event: FormEvent<HTMLFormElement>) {
@@ -540,7 +656,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     setPackageForm(createPackageForm(state.packageTemplates[0]?.id ?? "", state.packageTemplates[0]?.price ?? 0));
   }
 
-  function submitAssessment(event: FormEvent<HTMLFormElement>) {
+  async function submitAssessment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAssessmentError(null);
 
@@ -569,12 +685,33 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
       metrics,
     };
 
-    addBodyAssessment(input);
+    const nextAssessment = addBodyAssessment(input);
     setAssessmentForm({
       recordedDate: getDateInputValue(),
       notes: "",
       metrics: [createAssessmentMetricForm()],
     });
+
+    if (!nextAssessment) {
+      return;
+    }
+
+    setNutritionError(null);
+    setIsNutritionRefreshing(true);
+
+    try {
+      await refreshNutritionPlanRef.current({
+        clientId,
+        assessmentsOverride: [nextAssessment, ...assessments],
+        trigger: "assessment-update",
+      });
+    } catch (error) {
+      setNutritionError(
+        error instanceof Error ? error.message : t("clientProfile.nutritionGenerationFailed"),
+      );
+    } finally {
+      setIsNutritionRefreshing(false);
+    }
   }
 
   function submitWorkoutEntry(event: FormEvent<HTMLFormElement>) {
@@ -1924,16 +2061,11 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
         title={t("plans.nutritionPlan")}
         subtitle={t("clientProfile.nutritionAutoSubtitle")}
         aside={
-          <button
-            type="button"
-            onClick={() => void handleManualNutritionRefresh()}
-            disabled={isNutritionRefreshing}
-            className="rounded-full bg-[color:var(--clay)] px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(196,93,66,0.22)] transition disabled:cursor-wait disabled:opacity-70"
-          >
-            {isNutritionRefreshing
-              ? t("clientProfile.generatingNutrition")
-              : t("clientProfile.generateNutritionPlan")}
-          </button>
+          isNutritionRefreshing ? (
+            <span className="rounded-full bg-[color:var(--sand-2)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)]">
+              {t("clientProfile.generatingNutrition")}
+            </span>
+          ) : null
         }
       >
         {nutritionError ? (
@@ -1945,75 +2077,31 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
         {nutritionPlan ? (
           <div className="space-y-5">
             <div className="grid gap-4 lg:grid-cols-5">
-              <StatCard
-                label={t("clientProfile.nutritionCalories")}
-                value={String(nutritionPlan.calories)}
-                detail={t("clientProfile.nutritionPerDay")}
-              />
-              <StatCard
-                label={t("clientProfile.nutritionProtein")}
-                value={String(nutritionPlan.proteinGrams)}
-                detail={t("clientProfile.nutritionGrams")}
-              />
-              <StatCard
-                label={t("clientProfile.nutritionCarbs")}
-                value={String(nutritionPlan.carbsGrams)}
-                detail={t("clientProfile.nutritionGrams")}
-              />
-              <StatCard
-                label={t("clientProfile.nutritionFats")}
-                value={String(nutritionPlan.fatsGrams)}
-                detail={t("clientProfile.nutritionGrams")}
-              />
-              <StatCard
-                label={t("clientProfile.nutritionHydration")}
-                value={String(nutritionPlan.hydrationLiters)}
-                detail={t("clientProfile.nutritionLiters")}
-              />
+              {nutritionMetricCards.map((card) => (
+                <NutritionMetricCard
+                  key={card.key}
+                  label={card.label}
+                  value={card.value}
+                  detail={card.detail}
+                  mealBreakdown={card.mealBreakdown}
+                />
+              ))}
             </div>
 
-            <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
-              <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.24em] text-[color:var(--muted-ink)]">
-                      {t("clientProfile.nutritionRecommendation")}
-                    </p>
-                    <h3 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">
-                      {nutritionPlan.title}
-                    </h3>
-                  </div>
+            <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.24em] text-[color:var(--muted-ink)]">
+                    {t("clientProfile.nutritionRecommendation")}
+                  </p>
+                  <h3 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">
+                    {nutritionPlan.title}
+                  </h3>
+                </div>
+                <div className="flex items-center gap-3">
                   <span className="rounded-full bg-[color:var(--sand-2)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--ink)]">
                     AI
                   </span>
-                </div>
-
-                <p className="mt-4 text-sm leading-7 text-[color:var(--ink)]">
-                  {nutritionPlan.coachRecommendation}
-                </p>
-
-                <div className="mt-5">
-                  <p className="text-sm font-semibold text-[color:var(--ink)]">
-                    {t("clientProfile.nutritionPrinciples")}
-                  </p>
-                  <div className="mt-3 grid gap-3">
-                    {nutritionPlan.principles.map((principle) => (
-                      <div
-                        key={principle}
-                        className="rounded-2xl bg-[color:var(--sand-2)] px-4 py-3 text-sm leading-6 text-[color:var(--ink)]"
-                      >
-                        {principle}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-[color:var(--ink)]">
-                    {t("clientProfile.mealDistribution")}
-                  </p>
                   <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--muted-ink)]">
                     {formatDate(nutritionPlan.updatedAt, {
                       day: "2-digit",
@@ -2021,22 +2109,23 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                     })}
                   </p>
                 </div>
+              </div>
 
-                <div className="mt-4 grid gap-4 md:grid-cols-3">
-                  {mealDistribution.map((meal) => (
+              <p className="mt-4 text-sm leading-7 text-[color:var(--ink)]">
+                {nutritionPlan.coachRecommendation}
+              </p>
+
+              <div className="mt-5">
+                <p className="text-sm font-semibold text-[color:var(--ink)]">
+                  {t("clientProfile.nutritionPrinciples")}
+                </p>
+                <div className="mt-3 grid gap-3">
+                  {nutritionPlan.principles.map((principle) => (
                     <div
-                      key={meal.key}
-                      className="rounded-[22px] border border-[color:var(--line-soft)] bg-[color:var(--sand-2)]/70 p-4"
+                      key={principle}
+                      className="rounded-2xl bg-[color:var(--sand-2)] px-4 py-3 text-sm leading-6 text-[color:var(--ink)]"
                     >
-                      <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--muted-ink)]">
-                        {meal.label}
-                      </p>
-                      <p className="mt-3 text-3xl font-semibold text-[color:var(--ink)]">
-                        {meal.share}%
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">
-                        ~{Math.round((nutritionPlan.calories * meal.share) / 100)} kcal
-                      </p>
+                      {principle}
                     </div>
                   ))}
                 </div>
@@ -2046,7 +2135,13 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
         ) : (
           <EmptyState
             title={t("plans.nutritionPlan")}
-            body={t("clientProfile.noNutritionPlan")}
+            body={
+              assessments.length === 0
+                ? t("clientProfile.noNutritionPlanAwaitingAssessment")
+                : isNutritionRefreshing
+                  ? t("clientProfile.generatingNutrition")
+                  : t("clientProfile.noNutritionPlan")
+            }
           />
         )}
       </SectionCard>

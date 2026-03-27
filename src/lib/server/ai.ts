@@ -1382,6 +1382,10 @@ function roundToNearest(value: number, step = 5) {
   return Math.max(step, Math.round(value / step) * step);
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
 function findMetricValue(
   assessment: BodyAssessment | undefined,
   patterns: RegExp[],
@@ -1451,13 +1455,16 @@ function buildFallbackNutritionPlan(input: NutritionPlanInput): GeneratedNutriti
     : isFatLoss
       ? roundToNearest((weight ?? 68) * 28, 10)
       : roundToNearest((weight ?? 72) * 31, 10);
-  const proteinGrams = roundToNearest((weight ?? (isMassGain ? 82 : 70)) * 1.9, 5);
-  const fatsGrams = roundToNearest(
+  const proteinTargetPerKg = isMassGain ? 2 : isFatLoss ? 1.9 : 1.7;
+  const proteinGrams = roundToNearest((weight ?? (isMassGain ? 82 : 70)) * proteinTargetPerKg, 5);
+  const weightBasedFatTarget =
     isMassGain
       ? (weight ?? 80) * 1
       : isFatLoss
         ? (weight ?? 68) * 0.9
-        : (weight ?? 72) * 0.95,
+        : (weight ?? 72) * 0.95;
+  const fatsGrams = roundToNearest(
+    clamp(weightBasedFatTarget, (calories * 0.2) / 9, (calories * 0.3) / 9),
     1,
   );
   const carbsGrams = roundToNearest(
@@ -1479,15 +1486,15 @@ function buildFallbackNutritionPlan(input: NutritionPlanInput): GeneratedNutriti
             : isFatLoss
               ? "Alusta päeva valgu ja kiudainetega, et õhtune isu oleks paremini kontrolli all."
               : "Jaga valk ühtlaselt kolme põhitoidukorra peale, et taastumine püsiks stabiilne.",
-          prefersPortableBreakfast
-            ? "Valmista ette lihtne kaasavõetav hommikusöök, mida on lihtne hoida ka kiirel või reisipäeval."
-            : "Hoia hommikusöök korduv ja lihtne, et päev algaks ilma otsustusväsimuseta.",
+          "WHO suuna järgi hoia puu- ja köögivilju kokku vähemalt 400 g päevas ning eelista täistera- ja kaunviljaallikaid.",
+          "Hoia lisatud suhkrud madalad ja sool alla 5 g päevas; rasvad jäägu mõõdukaks ning tulegu peamiselt küllastumata allikatest.",
           client.healthFlags.length > 0
             ? `Arvesta tervisefookusega: ${client.healthFlags[0]?.detail ?? client.healthFlags[0]?.title}.`
-            : "Jäta nädalasse üks paindlik toidukord, et plaan püsiks ka reaalses elus.",
-          latestAssessment?.notes
-            ? `Viimase kehaanalüüsi fookus: ${latestAssessment.notes}`
-            : "Vaata energiataset ja treeningujärgset taastumist üle iga nädala lõpus.",
+            : prefersPortableBreakfast
+              ? "Valmista ette lihtne kaasavõetav hommikusöök, mida on lihtne hoida ka kiirel või reisipäeval."
+              : latestAssessment?.notes
+                ? `Viimase kehaanalüüsi fookus: ${latestAssessment.notes}`
+                : "Vaata energiataset ja treeningujärgset taastumist üle iga nädala lõpus.",
         ]
       : [
           isMassGain
@@ -1495,15 +1502,15 @@ function buildFallbackNutritionPlan(input: NutritionPlanInput): GeneratedNutriti
             : isFatLoss
               ? "Anchor the day with protein and fiber so evening hunger stays easier to manage."
               : "Distribute protein evenly across the three main meals to keep recovery steady.",
-          prefersPortableBreakfast
-            ? "Use a portable breakfast option that still works on rushed or travel-heavy days."
-            : "Keep breakfast repeatable and low-friction so the day starts without decision fatigue.",
+          "Keep fruit and vegetable intake at least around 400 g per day and lean on whole grains and legumes as core carbohydrate sources.",
+          "Keep free sugars low, salt under about 5 g per day, and total fats moderate with mostly unsaturated fat sources.",
           client.healthFlags.length > 0
             ? `Adjust food structure to support the current health flag: ${client.healthFlags[0]?.detail ?? client.healthFlags[0]?.title}.`
-            : "Leave one flexible meal in the week so the plan stays realistic.",
-          latestAssessment?.notes
-            ? `Latest body-composition context: ${latestAssessment.notes}`
-            : "Review energy and post-session recovery weekly and adjust from that trend.",
+            : prefersPortableBreakfast
+              ? "Use a portable breakfast option that still works on rushed or travel-heavy days."
+              : latestAssessment?.notes
+                ? `Latest body-composition context: ${latestAssessment.notes}`
+                : "Review energy and post-session recovery weekly and adjust from that trend.",
         ];
 
   const coachRecommendation =
@@ -1517,6 +1524,7 @@ function buildFallbackNutritionPlan(input: NutritionPlanInput): GeneratedNutriti
             : isMassGain
               ? "Praegune fookus on järjepidev energiaküllus, eriti päeva teises pooles ja pärast trenni."
               : "Praegune fookus on stabiilne taastumine, valgujaotus ja lihtne igapäevane rütm.",
+          "Makrod on hoitud WHO healthy diet raamiga kooskõlas: rasvad püsivad mõõdukad ning päevane struktuur rõhutab puu- ja köögivilju, madalamat lisatud suhkru hulka ja kontrollitud soola.",
         ].join(" ")
       : [
           latestAssessment?.notes
@@ -1527,6 +1535,7 @@ function buildFallbackNutritionPlan(input: NutritionPlanInput): GeneratedNutriti
             : isMassGain
               ? "The current target is consistent energy surplus, especially later in the day and after training."
               : "The current target is steady recovery, even protein distribution, and a low-friction daily rhythm.",
+          "The macro split stays aligned with WHO healthy-diet guardrails: moderate fats, plenty of fruit and vegetables, low added sugars, and controlled salt intake.",
         ].join(" ");
 
   return {
@@ -1602,16 +1611,17 @@ async function enhanceNutritionPlanWithOpenAI(
   }
 
   const systemPrompt =
-    "You create structured nutrition guidance for a coaching CRM. Return valid JSON only with keys title, calories, proteinGrams, carbsGrams, fatsGrams, hydrationLiters, principles, breakfastSharePercent, lunchSharePercent, dinnerSharePercent, coachRecommendation. Use concise values, 3-4 principles, and make breakfast/lunch/dinner percentages sum to 100. Do not use markdown or code fences. Do not invent measurements missing from the context.";
+    "You create structured nutrition guidance for a coaching CRM. Return valid JSON only with keys title, calories, proteinGrams, carbsGrams, fatsGrams, hydrationLiters, principles, breakfastSharePercent, lunchSharePercent, dinnerSharePercent, coachRecommendation. Use concise values, 3-4 principles, and make breakfast/lunch/dinner percentages sum to 100. Keep the plan aligned with WHO healthy-diet guardrails: total fats should stay moderate and not exceed about 30% of total energy, fruit and vegetables should be emphasized, free sugars should stay low, and salt should stay controlled. Adapt calories, protein, and meal timing to the client's goals, body assessment, and training context. Do not use markdown or code fences. Do not invent measurements missing from the context.";
 
   const response = await client.responses.create({
     model,
     input: `${systemPrompt}\n\nTask:\n${
       input.locale === "et"
-        ? "Koosta coach-facing toitumiskava soovitus, mis arvestab kliendi profiili, eesmärke, tervisefookusi, märkmeid, viimast kehaanalüüsi ja hiljutist treeningkoormust."
-        : "Create a coach-facing nutrition recommendation that reflects the client profile, goals, health flags, notes, latest body assessment, and recent training load."
+        ? "Koosta coach-facing toitumiskava soovitus, mis arvestab kliendi profiili, eesmärke, tervisefookusi, märkmeid, viimast kehaanalüüsi ja hiljutist treeningkoormust. Põhimõtted peavad peegeldama WHO healthy diet soovitusi, kuid päevased kalorid, valk ja söögikordade jaotus peavad olema kohandatud kliendi eesmärgile."
+        : "Create a coach-facing nutrition recommendation that reflects the client profile, goals, health flags, notes, latest body assessment, and recent training load. The principles should reflect WHO healthy-diet guidance, while daily calories, protein, and meal distribution should stay tailored to the client's goal."
     }\n\nContext JSON:\n${safeJsonStringify({
       locale: input.locale,
+      fallbackPlan: fallback,
       client: input.client,
       currentNutritionPlan: input.currentNutritionPlan,
       recentAssessments: input.recentAssessments.slice(0, 4),

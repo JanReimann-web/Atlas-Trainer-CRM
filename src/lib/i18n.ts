@@ -266,7 +266,7 @@ const messages: Record<Locale, DictionaryTree> = {
       generateNutritionPlan: "Generate AI nutrition plan",
       generatingNutrition: "Updating nutrition plan...",
       nutritionAutoSubtitle:
-        "AI refreshes this plan after client profile or body-assessment changes. The coach can also trigger it manually.",
+        "AI creates this plan automatically after the first body assessment and refreshes it again after each new body assessment.",
       nutritionRecommendation: "AI recommendation",
       nutritionPrinciples: "Key structure",
       mealDistribution: "Breakfast / lunch / dinner split",
@@ -274,7 +274,9 @@ const messages: Record<Locale, DictionaryTree> = {
       lunch: "Lunch",
       dinner: "Dinner",
       noNutritionPlan:
-        "No nutrition plan has been generated yet. Use the AI button to create a coach-facing structure from the profile and latest body assessment.",
+        "No nutrition plan has been generated yet. The next body-assessment based refresh should create it automatically.",
+      noNutritionPlanAwaitingAssessment:
+        "No nutrition plan is available yet. Add the first body assessment and AI will create the plan automatically.",
       nutritionGenerationFailed:
         "The nutrition plan could not be refreshed right now. Please try again.",
       noSession: "No upcoming session scheduled yet.",
@@ -778,7 +780,7 @@ const messages: Record<Locale, DictionaryTree> = {
       generateNutritionPlan: "Genereeri AI toitumiskava",
       generatingNutrition: "Uuendan toitumiskava...",
       nutritionAutoSubtitle:
-        "AI värskendab seda kava pärast kliendiprofiili või kehaanalüüsi muutmist. Treener saab selle ka käsitsi käivitada.",
+        "AI loob selle kava automaatselt pärast esimest kehaanalüüsi ja värskendab seda iga uue kehaanalüüsi järel.",
       nutritionRecommendation: "AI soovitus",
       nutritionPrinciples: "Põhistruktuur",
       mealDistribution: "Hommiku-, lõuna- ja õhtusöögi jaotus",
@@ -786,7 +788,9 @@ const messages: Record<Locale, DictionaryTree> = {
       lunch: "Lõunasöök",
       dinner: "Õhtusöök",
       noNutritionPlan:
-        "Toitumiskava pole veel genereeritud. Kasuta AI nuppu, et luua profiili ja viimase kehaanalüüsi põhjal treenerile uus struktuur.",
+        "Toitumiskava pole veel genereeritud. Järgmine kehaanalüüsipõhine värskendus peaks selle automaatselt looma.",
+      noNutritionPlanAwaitingAssessment:
+        "Toitumiskava pole veel saadaval. Lisa esimene kehaanalüüs ja AI loob kava automaatselt.",
       nutritionGenerationFailed:
         "Toitumiskava ei õnnestunud praegu värskendada. Proovi palun uuesti.",
       noSession: "Järgmine treening pole veel kalendrisse pandud.",
