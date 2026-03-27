@@ -14,7 +14,6 @@ import {
   getClient,
   getClientAssessments,
   getClientDrafts,
-  getClientMessages,
   getClientNutritionPlans,
   getClientPurchases,
   getClientSessions,
@@ -286,6 +285,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     createWorkoutEntryForm(state.trainingLocations[0]?.name ?? ""),
   );
   const [workoutEntryError, setWorkoutEntryError] = useState<string | null>(null);
+  const [openWorkoutRecapId, setOpenWorkoutRecapId] = useState<string | null>(null);
 
   useEffect(() => {
     refreshNutritionPlanRef.current = refreshNutritionPlan;
@@ -376,11 +376,9 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
 
     return right.startAt.localeCompare(left.startAt);
   });
-  const drafts = getClientDrafts(state, clientId).slice(0, 3);
-  const messages = getClientMessages(state, clientId).slice(0, 4);
-  const reminders = state.reminders
-    .filter((reminder) => reminder.clientId === clientId)
-    .slice(0, 4);
+  const workoutRecaps = getClientDrafts(state, clientId).filter(
+    (draft) => draft.type === "workout-summary" && draft.status === "sent",
+  );
   const mealDistribution = nutritionPlan
     ? [
         {
@@ -1990,74 +1988,6 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
       </SectionCard>
 
       <SectionCard
-        title={t("clientProfile.communication")}
-        subtitle={t("clientProfile.communicationSubtitle")}
-        help={t("help.communication")}
-      >
-        <div className="grid gap-4 xl:grid-cols-3">
-          <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
-            <p className="font-semibold text-[color:var(--ink)]">{t("clientProfile.messages")}</p>
-            <div className="mt-4 space-y-3">
-              {messages.length === 0 ? (
-                <EmptyState title={t("common.none")} body={t("clientProfile.noMessages")} />
-              ) : (
-                messages.map((message) => (
-                  <div key={message.id} className="rounded-2xl bg-[color:var(--sand-2)]/70 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-medium text-[color:var(--ink)]">{message.subject}</p>
-                      <StatusBadge status={message.direction === "outbound" ? "sent" : "active"} />
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">{message.body}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
-            <p className="font-semibold text-[color:var(--ink)]">{t("clientProfile.reminders")}</p>
-            <div className="mt-4 space-y-3">
-              {reminders.length === 0 ? (
-                <EmptyState title={t("common.none")} body={t("clientProfile.noReminders")} />
-              ) : (
-                reminders.map((reminder) => (
-                  <div key={reminder.id} className="rounded-2xl bg-[color:var(--sand-2)]/70 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-medium text-[color:var(--ink)]">{reminder.title}</p>
-                      <StatusBadge status={reminder.status} />
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">
-                      {t(reminder.channel === "calendar" ? "common.calendarChannel" : "common.emailChannel")} /{" "}
-                      {formatDate(reminder.dueAt)}
-                    </p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
-            <p className="font-semibold text-[color:var(--ink)]">{t("clientProfile.drafts")}</p>
-            <div className="mt-4 space-y-3">
-              {drafts.length === 0 ? (
-                <EmptyState title={t("common.none")} body={t("clientProfile.noDrafts")} />
-              ) : (
-                drafts.map((draft) => (
-                  <div key={draft.id} className="rounded-2xl bg-[color:var(--sand-2)]/70 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-medium text-[color:var(--ink)]">{draft.title}</p>
-                      <StatusBadge status={draft.status} />
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">{draft.subject}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      </SectionCard>
-
-      <SectionCard
         title={t("plans.nutritionPlan")}
         subtitle={t("clientProfile.nutritionAutoSubtitle")}
         aside={
@@ -2144,6 +2074,65 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
             }
           />
         )}
+      </SectionCard>
+
+      <SectionCard
+        title={t("clientProfile.workoutRecaps")}
+        subtitle={t("clientProfile.workoutRecapsSubtitle")}
+      >
+        <div className="space-y-3">
+          {workoutRecaps.length === 0 ? (
+            <EmptyState title={t("common.none")} body={t("clientProfile.noWorkoutRecaps")} />
+          ) : (
+            workoutRecaps.map((recap) => {
+              const linkedSession = recap.sessionId
+                ? state.sessions.find((session) => session.id === recap.sessionId)
+                : null;
+              const isOpen = openWorkoutRecapId === recap.id;
+
+              return (
+                <div
+                  key={recap.id}
+                  className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="font-semibold text-[color:var(--ink)]">
+                        {recap.subject || recap.title}
+                      </p>
+                      <p className="text-sm leading-6 text-[color:var(--muted-ink)]">
+                        {linkedSession ? `${linkedSession.title} / ` : ""}
+                        {formatDate(recap.updatedAt)}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOpenWorkoutRecapId((current) => (current === recap.id ? null : recap.id))
+                      }
+                      className="rounded-full border border-[color:var(--line-soft)] bg-[color:var(--sand-2)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+                    >
+                      {isOpen
+                        ? t("clientProfile.hideWorkoutRecap")
+                        : t("clientProfile.openWorkoutRecap")}
+                    </button>
+                  </div>
+
+                  <div className="mt-3 rounded-2xl bg-[color:var(--sand-2)]/70 px-4 py-3">
+                    <p
+                      className={`whitespace-pre-wrap text-sm leading-7 text-[color:var(--muted-ink)] ${
+                        isOpen ? "" : "line-clamp-4"
+                      }`}
+                    >
+                      {recap.body}
+                    </p>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </SectionCard>
     </div>
   );

@@ -292,6 +292,13 @@ const messages: Record<Locale, DictionaryTree> = {
       noMessages: "No messages have been logged for this client yet.",
       noReminders: "No follow-ups are waiting for this client right now.",
       noDrafts: "No recent AI drafts are attached to this client yet.",
+      workoutRecaps: "Workout recaps",
+      workoutRecapsSubtitle:
+        "Saved workout recaps are listed here in reverse chronological order so the newest ones are fastest to reach.",
+      noWorkoutRecaps:
+        "No saved workout recaps are attached to this client yet. Mark a session complete and save the recap to see it here.",
+      openWorkoutRecap: "Open recap",
+      hideWorkoutRecap: "Hide recap",
       nutritionCalories: "Calories",
       nutritionProtein: "Protein",
       nutritionCarbs: "Carbs",
@@ -806,6 +813,13 @@ const messages: Record<Locale, DictionaryTree> = {
       noMessages: "Selle kliendi kohta pole veel kirju logitud.",
       noReminders: "Selle kliendi jaoks ei oota praegu ühtegi järeltegevust.",
       noDrafts: "Selle kliendi küljes pole veel värskeid AI-mustandeid.",
+      workoutRecaps: "Treening kokkuvõtted",
+      workoutRecapsSubtitle:
+        "Salvestatud treeningu kokkuvõtted on siin vastupidises kronoloogilises järjekorras, et uusimad oleksid kõige kiiremini leitavad.",
+      noWorkoutRecaps:
+        "Selle kliendi küljes pole veel salvestatud treeningu kokkuvõtteid. Märgi sessioon tehtuks ja salvesta kokkuvõte, et see siia ilmuks.",
+      openWorkoutRecap: "Ava kokkuvõte",
+      hideWorkoutRecap: "Peida kokkuvõte",
       nutritionCalories: "Kalorid",
       nutritionProtein: "Valk",
       nutritionCarbs: "Süsivesikud",
