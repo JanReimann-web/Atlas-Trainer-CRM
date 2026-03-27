@@ -49,6 +49,31 @@ type FirstWorkoutInput = {
   trainingLocations?: TrainingLocation[];
 };
 
+type CompletedWorkoutContext = {
+  session: Session;
+  plannedWorkout?: PlannedWorkout | null;
+  sessionWorkout?: SessionWorkout | null;
+};
+
+type ReworkSessionInput = {
+  locale: Locale;
+  client: ClientProfile;
+  session: Session;
+  plannedWorkout?: PlannedWorkout | null;
+  sessionWorkout?: SessionWorkout | null;
+  recentAssessments: BodyAssessment[];
+  recentCompletedWorkouts: CompletedWorkoutContext[];
+  instructions: string;
+};
+
+type NextWorkoutInput = {
+  locale: Locale;
+  client: ClientProfile;
+  currentWorkoutPlan?: WorkoutPlan | null;
+  recentAssessments: BodyAssessment[];
+  recentCompletedWorkouts: CompletedWorkoutContext[];
+};
+
 type GeneratedFirstWorkout = {
   planTitle: string;
   planGoal: string;
@@ -1041,6 +1066,165 @@ function mergeFirstWorkoutWithFallback(
   };
 }
 
+function mapSessionWorkoutExercisesToInputs(
+  sessionWorkout?: SessionWorkout | null,
+): WorkoutExerciseInput[] {
+  if (!sessionWorkout) {
+    return [];
+  }
+
+  return sessionWorkout.exercises
+    .filter((exercise) => exercise.status !== "skipped")
+    .map<WorkoutExerciseInput | null>((exercise) => {
+      const sets = exercise.sets
+        .map((set) => ({
+          label: set.label,
+          reps: set.actualReps?.trim() || set.targetReps?.trim() || "",
+          weightKg: set.actualWeightKg ?? set.targetWeightKg,
+          tempo: set.tempo,
+          rpe: set.rpe,
+          note: set.note,
+        }))
+        .filter((set) => set.reps);
+
+      if (!exercise.name.trim() || sets.length === 0) {
+        return null;
+      }
+
+      return {
+        name: exercise.name.trim(),
+        note: exercise.note?.trim() || undefined,
+        sets,
+      };
+    })
+    .filter((exercise): exercise is WorkoutExerciseInput => exercise !== null);
+}
+
+function mapPlannedWorkoutExercisesToInputs(
+  plannedWorkout?: PlannedWorkout | null,
+): WorkoutExerciseInput[] {
+  if (!plannedWorkout) {
+    return [];
+  }
+
+  return plannedWorkout.exercises
+    .map<WorkoutExerciseInput | null>((exercise) => {
+      const sets = exercise.sets
+        .map((set) => ({
+          label: set.label,
+          reps: set.reps?.trim() || "",
+          weightKg: set.weightKg,
+          tempo: set.tempo,
+          rpe: set.rpe,
+          note: set.note,
+        }))
+        .filter((set) => set.reps);
+
+      if (!exercise.name.trim() || sets.length === 0) {
+        return null;
+      }
+
+      return {
+        name: exercise.name.trim(),
+        focus: exercise.focus?.trim() || undefined,
+        note: exercise.note?.trim() || undefined,
+        sets,
+      };
+    })
+    .filter((exercise): exercise is WorkoutExerciseInput => exercise !== null);
+}
+
+function bumpRepTarget(reps: string) {
+  const trimmed = reps.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  const single = /^(\d+)$/u.exec(trimmed);
+  if (single) {
+    return String(Math.min(20, Number(single[1]) + 1));
+  }
+
+  const bilateral = /^(\d+)\s*\/\s*(\d+)$/u.exec(trimmed);
+  if (bilateral) {
+    return `${Math.min(20, Number(bilateral[1]) + 1)}/${Math.min(20, Number(bilateral[2]) + 1)}`;
+  }
+
+  return trimmed;
+}
+
+function buildProgressedExercisesFromHistory(
+  recentCompletedWorkouts: CompletedWorkoutContext[],
+): WorkoutExerciseInput[] {
+  const latest = recentCompletedWorkouts[0];
+  if (!latest?.sessionWorkout) {
+    return [];
+  }
+
+  return latest.sessionWorkout.exercises
+    .filter((exercise) => exercise.status !== "skipped")
+    .map<WorkoutExerciseInput | null>((exercise) => {
+      const plannedMatch = latest.plannedWorkout?.exercises.find(
+        (plannedExercise) => plannedExercise.id === exercise.plannedExerciseId,
+      );
+      const sets = exercise.sets
+        .map((set) => ({
+          label: set.label,
+          reps: bumpRepTarget(set.actualReps || set.targetReps),
+          weightKg: set.actualWeightKg ?? set.targetWeightKg,
+          tempo: set.tempo,
+          rpe:
+            typeof set.rpe === "number" && Number.isFinite(set.rpe)
+              ? Math.min(8, Math.max(5, set.rpe))
+              : undefined,
+          note: set.note,
+        }))
+        .filter((set) => set.reps);
+
+      if (!exercise.name.trim() || sets.length === 0) {
+        return null;
+      }
+
+      return {
+        name: exercise.name.trim(),
+        focus: plannedMatch?.focus?.trim() || undefined,
+        note: exercise.note?.trim() || plannedMatch?.note?.trim() || undefined,
+        sets,
+      };
+    })
+    .filter((exercise): exercise is WorkoutExerciseInput => exercise !== null);
+}
+
+function buildRecentCoachNotesSummary(recentCompletedWorkouts: CompletedWorkoutContext[]) {
+  return recentCompletedWorkouts
+    .map((item) => item.sessionWorkout?.coachNote?.trim())
+    .filter((value): value is string => Boolean(value))
+    .slice(0, 3);
+}
+
+function buildRecentSessionLabel(
+  locale: Locale,
+  recentCompletedWorkouts: CompletedWorkoutContext[],
+  fallbackTitle: string,
+) {
+  const latestTitle = recentCompletedWorkouts[0]?.session.title?.trim();
+  if (!latestTitle) {
+    return fallbackTitle;
+  }
+
+  const estonianNumbered = /^(\d+)\.\s*treening\s*:\s*(.+)$/iu.exec(latestTitle);
+  if (estonianNumbered) {
+    return `${Number(estonianNumbered[1]) + 1}. treening: ${estonianNumbered[2].trim()}`;
+  }
+
+  const genericNumbered = /^(\d+)\.\s*(.+)$/u.exec(latestTitle);
+  if (genericNumbered) {
+    return `${Number(genericNumbered[1]) + 1}. ${genericNumbered[2].trim()}`;
+  }
+
+  return locale === "et" ? `Järgmine treening: ${latestTitle}` : `Next workout: ${latestTitle}`;
+}
+
 function roundToNearest(value: number, step = 5) {
   return Math.max(step, Math.round(value / step) * step);
 }
@@ -1328,6 +1512,34 @@ async function enhanceFirstWorkoutWithOpenAI(
       recentSessions: input.recentSessions.slice(0, 4),
       trainingLocations: input.trainingLocations?.slice(0, 5),
     })}`,
+  });
+
+  return mergeFirstWorkoutWithFallback(
+    fallback,
+    parseFirstWorkoutFields(response.output_text),
+  );
+}
+
+async function enhanceStructuredWorkoutWithOpenAI(
+  fallback: GeneratedFirstWorkout,
+  taskInstruction: string,
+  context: Record<string, unknown>,
+) {
+  const client = getOpenAIClient();
+  const model = getOpenAIModel();
+
+  if (!client || !model) {
+    return fallback;
+  }
+
+  const systemPrompt =
+    "You create structured coach-ready workouts for a coaching CRM. Return valid JSON only with keys planTitle, planGoal, focusAreas, sessionPattern, sessionTitle, sessionObjective, sessionKind, location, coachNote, sessionNote, exercises. sessionKind must be one of solo, duo, group. location must be an empty string unless the task explicitly says to keep a location. focusAreas and sessionPattern should each have 2 to 4 concise strings. exercises must contain exactly 5 exercise objects, and each exercise must have name, optional focus, optional note, and a non-empty sets array. Each set must have label and reps, with optional weightKg, tempo, rpe, and note. Do not use markdown, code fences, or commentary outside JSON. Do not invent medical facts or equipment that conflicts with the context.";
+
+  const response = await client.responses.create({
+    model,
+    input: `${systemPrompt}\n\nTask:\n${taskInstruction}\n\nFallback JSON:\n${safeJsonStringify(
+      fallback,
+    )}\n\nContext JSON:\n${safeJsonStringify(context)}`,
   });
 
   return mergeFirstWorkoutWithFallback(
@@ -1655,5 +1867,144 @@ export async function buildFirstWorkoutRecommendation(input: FirstWorkoutInput) 
       ...fallback,
       exercises: ensureFiveExercises([], fallback.exercises),
     };
+  }
+}
+
+function buildFallbackSessionReworkRecommendation(
+  input: ReworkSessionInput,
+): GeneratedFirstWorkout {
+  const base = buildFallbackFirstWorkout({
+    locale: input.locale,
+    client: input.client,
+    recentAssessments: input.recentAssessments,
+    recentSessions: input.recentCompletedWorkouts.map((item) => item.session),
+  });
+  const currentExercises = ensureFiveExercises(
+    mapSessionWorkoutExercisesToInputs(input.sessionWorkout),
+    mapPlannedWorkoutExercisesToInputs(input.plannedWorkout),
+  );
+  const historyExercises = ensureFiveExercises(
+    currentExercises,
+    buildProgressedExercisesFromHistory(input.recentCompletedWorkouts),
+  );
+  const normalizedInstructions = input.instructions.trim();
+
+  return {
+    ...base,
+    location: "",
+    sessionKind: input.session.kind,
+    sessionTitle:
+      input.locale === "et"
+        ? `Kohandatud: ${input.session.title}`
+        : `Adjusted: ${input.session.title}`,
+    sessionObjective:
+      input.locale === "et"
+        ? normalizedInstructions
+          ? `Kohanda tänane trenn selle juhise järgi: ${normalizedInstructions}`
+          : `Kohanda tänane trenn kliendi profiili ja viimaste sessioonide põhjal.`
+        : normalizedInstructions
+          ? `Adjust today's workout to follow this coach direction: ${normalizedInstructions}`
+          : `Adjust today's workout using the client profile and recent sessions.`,
+    coachNote:
+      input.locale === "et"
+        ? normalizedInstructions
+          ? `Treeneri lisajuhis: ${normalizedInstructions}`
+          : `Muuda tänast treeningut vastavalt koormuse taluvusele ja tehnika kvaliteedile.`
+        : normalizedInstructions
+          ? `Coach adjustment request: ${normalizedInstructions}`
+          : `Rework today's session around load tolerance and movement quality.`,
+    sessionNote:
+      input.locale === "et"
+        ? "Treener uuendas AI abil sessiooni ülesehitust enne läbiviimist."
+        : "The coach refreshed this session structure with AI before running it.",
+    exercises: ensureFiveExercises(historyExercises, base.exercises),
+  };
+}
+
+function buildFallbackNextWorkoutRecommendation(
+  input: NextWorkoutInput,
+): GeneratedFirstWorkout {
+  const base = buildFallbackFirstWorkout({
+    locale: input.locale,
+    client: input.client,
+    recentAssessments: input.recentAssessments,
+    recentSessions: input.recentCompletedWorkouts.map((item) => item.session),
+  });
+  const recentCoachNotes = buildRecentCoachNotesSummary(input.recentCompletedWorkouts);
+  const progressedExercises = ensureFiveExercises(
+    buildProgressedExercisesFromHistory(input.recentCompletedWorkouts),
+    base.exercises,
+  );
+
+  return {
+    ...base,
+    location: "",
+    sessionTitle: buildRecentSessionLabel(input.locale, input.recentCompletedWorkouts, base.sessionTitle),
+    sessionObjective:
+      input.locale === "et"
+        ? "Koosta järgmine sessioon nii, et see jätkaks viimaste treeningute progressiooni mõõduka, loogilise koormusega."
+        : "Build the next session so it continues the recent progression with moderate, logical loading.",
+    coachNote:
+      input.locale === "et"
+        ? recentCoachNotes.length > 0
+          ? `Arvesta järgmises trennis nende treeneri märkustega: ${recentCoachNotes.join(" | ")}`
+          : "Kasuta järgmises treeningus viimase 7 sessiooni koormustaluvust ja tehnikamärkmeid."
+        : recentCoachNotes.length > 0
+          ? `Use these recent coach notes in the next session: ${recentCoachNotes.join(" | ")}`
+          : "Use the last 7 completed sessions and coach notes to guide the next progression.",
+    sessionNote:
+      input.locale === "et"
+        ? "AI lõi järgmise trenni automaatselt pärast sessiooni lõpetamist."
+        : "AI created this next workout automatically after the session was completed.",
+    exercises: progressedExercises,
+  };
+}
+
+export async function buildSessionReworkRecommendation(input: ReworkSessionInput) {
+  const fallback = buildFallbackSessionReworkRecommendation(input);
+
+  try {
+    return await enhanceStructuredWorkoutWithOpenAI(
+      fallback,
+      input.locale === "et"
+        ? "Tee ümber käesolev treening. Treeneri lisajuhis on kohustuslik sisend, mida tuleb järgida. Arvesta kliendi profiili, tervisefookuste, viimaste lõpetatud treeningute ja treeneri kommentaaridega. Tagasta täpselt 5 harjutust. Jäta location tühjaks stringiks, sest treener määrab aja ja koha ise."
+        : "Rebuild the current workout. The coach instruction is a hard constraint that must be followed. Use the client profile, health flags, recent completed workouts, and coach comments. Return exactly 5 exercises. Leave location as an empty string because the coach sets timing and place manually.",
+      {
+        locale: input.locale,
+        client: input.client,
+        currentSession: input.session,
+        currentPlannedWorkout: input.plannedWorkout,
+        currentSessionWorkout: input.sessionWorkout,
+        recentAssessments: input.recentAssessments.slice(0, 4),
+        recentCompletedWorkouts: input.recentCompletedWorkouts.slice(0, 7),
+        coachInstructions: input.instructions,
+      },
+    );
+  } catch (error) {
+    console.error("OpenAI current workout rebuild failed.", error);
+    return fallback;
+  }
+}
+
+export async function buildNextWorkoutRecommendation(input: NextWorkoutInput) {
+  const fallback = buildFallbackNextWorkoutRecommendation(input);
+
+  try {
+    return await enhanceStructuredWorkoutWithOpenAI(
+      fallback,
+      input.locale === "et"
+        ? "Koosta kliendile kohe järgmine treening pärast äsja lõpetatud sessiooni. Lähtu kuni viimase 7 lõpetatud treeningu sisust, tegelikust sooritusest ja treeneri kommentaaridest. Jätka progressiooni loogiliselt, mitte juhuslikult. Tagasta täpselt 5 harjutust ning jäta location tühjaks stringiks."
+        : "Create the next workout immediately after the completed session. Use up to the last 7 completed workouts, actual execution data, and coach comments. Continue progression logically, not randomly. Return exactly 5 exercises and leave location as an empty string.",
+      {
+        locale: input.locale,
+        client: input.client,
+        currentWorkoutPlan: input.currentWorkoutPlan,
+        recentAssessments: input.recentAssessments.slice(0, 4),
+        recentCompletedWorkouts: input.recentCompletedWorkouts.slice(0, 7),
+      },
+    );
+  } catch (error) {
+    console.error("OpenAI next workout generation failed.", error);
+    return fallback;
   }
 }

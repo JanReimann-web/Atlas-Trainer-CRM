@@ -34,6 +34,7 @@ import {
   getClientAssessments,
   getClientNutritionPlans,
   getClientSessions,
+  getSessionBundle,
 } from "@/lib/selectors";
 import {
   AIDraft,
@@ -50,6 +51,7 @@ import {
   Locale,
   NutritionPlan,
   PackageTemplateInput,
+  PlannedWorkout,
   SessionExercise,
   SessionWorkout,
   TrainingLocation,
@@ -136,7 +138,11 @@ type CRMContextValue = {
     state: SessionExercise["status"],
   ) => void;
   addExercise: (sessionId: string, name: string) => void;
-  completeSession: (sessionId: string) => void;
+  regenerateSessionWorkout: (args: {
+    sessionId: string;
+    instructions: string;
+  }) => Promise<void>;
+  completeSession: (sessionId: string) => Promise<void>;
   refreshNutritionPlan: (args: {
     clientId: string;
     clientOverride?: ClientProfile;
@@ -958,6 +964,281 @@ function createWorkoutSessionState(
   };
 }
 
+type GeneratedSessionDraft = Pick<
+  StarterWorkoutDraft,
+  "sessionTitle" | "sessionObjective" | "sessionKind" | "coachNote" | "sessionNote" | "exercises"
+>;
+
+function getActiveWorkoutPlan(previous: CRMState, clientId: string) {
+  return previous.workoutPlans.find(
+    (plan) => plan.clientId === clientId && plan.status === "active",
+  );
+}
+
+function getReplaceableQueuedSession(previous: CRMState, clientId: string) {
+  return [...previous.sessions]
+    .filter(
+      (session) =>
+        (session.primaryClientId === clientId || session.clientIds.includes(clientId)) &&
+        session.status === "planned",
+    )
+    .sort((left, right) => {
+      const leftKey = left.startAt || "9999-12-31T23:59:59.999Z";
+      const rightKey = right.startAt || "9999-12-31T23:59:59.999Z";
+      return leftKey.localeCompare(rightKey);
+    })[0];
+}
+
+function getRecentCompletedSessionBundles(
+  previous: CRMState,
+  clientId: string,
+  limit = 7,
+) {
+  return previous.sessions
+    .filter(
+      (session) =>
+        (session.primaryClientId === clientId || session.clientIds.includes(clientId)) &&
+        session.status === "completed",
+    )
+    .map((session) => getSessionBundle(previous, session.id))
+    .filter((bundle) => Boolean(bundle?.client?.id === clientId))
+    .sort((left, right) => {
+      if (!left || !right) {
+        return 0;
+      }
+      const leftKey =
+        left.session.endAt || left.session.startAt || left.sessionWorkout?.updatedAt || "";
+      const rightKey =
+        right.session.endAt || right.session.startAt || right.sessionWorkout?.updatedAt || "";
+      return rightKey.localeCompare(leftKey);
+    })
+    .slice(0, limit)
+    .flatMap((bundle) =>
+      bundle
+        ? [
+            {
+              session: bundle.session,
+              plannedWorkout: bundle.plannedWorkout,
+              sessionWorkout: bundle.sessionWorkout,
+            },
+          ]
+        : [],
+    );
+}
+
+function replaceSessionWorkoutState(
+  previous: CRMState,
+  sessionId: string,
+  workout: GeneratedSessionDraft,
+  actor: string,
+  options?: {
+    activityType?: string;
+    activityDetail?: string;
+  },
+): CRMState {
+  const session = previous.sessions.find((item) => item.id === sessionId);
+  if (!session) {
+    return previous;
+  }
+
+  const exercises = normalizeWorkoutExercises(workout.exercises);
+  if (!workout.sessionTitle.trim() || !workout.sessionObjective.trim() || exercises.length === 0) {
+    return previous;
+  }
+
+  const now = timestamp();
+  const currentPlannedWorkout = previous.plannedWorkouts.find(
+    (item) => item.id === session.plannedWorkoutId,
+  );
+  const currentSessionWorkout = previous.sessionWorkouts.find(
+    (item) => item.id === session.sessionWorkoutId,
+  );
+  const plannedWorkoutId = `pw-${crypto.randomUUID()}`;
+  const sessionWorkoutId = `sw-${crypto.randomUUID()}`;
+  const plannedWorkout: PlannedWorkout = {
+    id: plannedWorkoutId,
+    clientId: session.primaryClientId,
+    sessionId: session.id,
+    sourcePlanId:
+      currentPlannedWorkout?.sourcePlanId ??
+      getActiveWorkoutPlan(previous, session.primaryClientId)?.id,
+    title: workout.sessionTitle.trim(),
+    objective: workout.sessionObjective.trim(),
+    createdAt: now,
+    exercises: exercises.map((exercise) => ({
+      id: `pex-${crypto.randomUUID()}`,
+      name: exercise.name,
+      focus: exercise.focus,
+      note: exercise.note,
+      sets: exercise.sets.map((set) => ({
+        id: `ps-${crypto.randomUUID()}`,
+        label: set.label,
+        reps: set.reps,
+        weightKg: set.weightKg,
+        tempo: set.tempo,
+        rpe: set.rpe,
+        note: set.note,
+      })),
+    })),
+  };
+  const sessionWorkoutStatus: SessionWorkout["status"] =
+    session.status === "completed"
+      ? "completed"
+      : session.status === "in-progress"
+        ? "live"
+        : "draft";
+  const markCompleted = session.status === "completed";
+  const nextSessionWorkout: SessionWorkout = {
+    id: sessionWorkoutId,
+    sessionId: session.id,
+    title: workout.sessionTitle.trim(),
+    status: sessionWorkoutStatus,
+    exercises: plannedWorkout.exercises.map((exercise) => ({
+      id: `sex-${crypto.randomUUID()}`,
+      plannedExerciseId: exercise.id,
+      name: exercise.name,
+      status: markCompleted ? "completed" : "planned",
+      note: exercise.note,
+      sets: exercise.sets.map((set) => ({
+        id: `set-${crypto.randomUUID()}`,
+        label: set.label,
+        targetReps: set.reps,
+        actualReps: set.reps,
+        targetWeightKg: set.weightKg,
+        actualWeightKg: set.weightKg,
+        tempo: set.tempo,
+        rpe: set.rpe,
+        completed: markCompleted,
+        note: set.note,
+      })),
+    })),
+    coachNote: workout.coachNote.trim(),
+    athleteFacingNote: "",
+    updatedAt: now,
+  };
+
+  return {
+    ...previous,
+    sessions: previous.sessions.map((item) =>
+      item.id === sessionId
+        ? {
+            ...item,
+            title: workout.sessionTitle.trim(),
+            kind: workout.sessionKind,
+            plannedWorkoutId,
+            sessionWorkoutId,
+            note: workout.sessionNote.trim() || workout.sessionObjective.trim() || item.note,
+          }
+        : item,
+    ),
+    plannedWorkouts: [
+      plannedWorkout,
+      ...previous.plannedWorkouts.filter((item) => item.id !== currentPlannedWorkout?.id),
+    ],
+    sessionWorkouts: [
+      nextSessionWorkout,
+      ...previous.sessionWorkouts.filter((item) => item.id !== currentSessionWorkout?.id),
+    ],
+    aiDrafts: previous.aiDrafts.filter((draft) => draft.sessionId !== sessionId),
+    activityEvents: [
+      {
+        id: `act-${crypto.randomUUID()}`,
+        actor,
+        clientId: session.primaryClientId,
+        type: options?.activityType ?? "session.updated",
+        detail:
+          options?.activityDetail ??
+          `AI rebuilt the workout structure for ${session.title}.`,
+        createdAt: now,
+      },
+      ...previous.activityEvents,
+    ],
+  };
+}
+
+function upsertGeneratedNextSession(
+  previous: CRMState,
+  clientId: string,
+  workout: GeneratedSessionDraft,
+  actor: string,
+) {
+  const client = previous.clients.find((item) => item.id === clientId);
+  if (!client) {
+    return previous;
+  }
+
+  const replaceableSession = getReplaceableQueuedSession(previous, clientId);
+  if (replaceableSession) {
+    return replaceSessionWorkoutState(previous, replaceableSession.id, workout, actor, {
+      activityType: "session.planned",
+      activityDetail: `AI refreshed the queued next workout for ${client.fullName}.`,
+    });
+  }
+
+  return createWorkoutSessionState(
+    previous,
+    {
+      clientId,
+      title: workout.sessionTitle,
+      objective: workout.sessionObjective,
+      startAt: "",
+      endAt: "",
+      kind: workout.sessionKind,
+      status: "planned",
+      location: "",
+      coachNote: workout.coachNote,
+      sessionNote: workout.sessionNote,
+      exercises: workout.exercises,
+    },
+    actor,
+    {
+      sourcePlanId: getActiveWorkoutPlan(previous, clientId)?.id,
+      activityType: "session.planned",
+      activityDetail: `AI prepared the next workout for ${client.fullName}.`,
+      skipScheduleValidation: true,
+    },
+  );
+}
+
+function buildCompletedSessionState(previous: CRMState, sessionId: string, actor: string) {
+  const existingSession = previous.sessions.find((session) => session.id === sessionId);
+  const alreadyCompleted = existingSession?.status === "completed";
+  const nextState = updateWorkout(previous, sessionId, (workout) => ({
+    ...workout,
+    status: "completed",
+  }));
+
+  return {
+    ...nextState,
+    sessions: nextState.sessions.map((session) =>
+      session.id === sessionId
+        ? { ...session, status: "completed" as const }
+        : session,
+    ),
+    packagePurchases: nextState.packagePurchases.map((purchase) => {
+      if (purchase.id === existingSession?.packagePurchaseId && !alreadyCompleted) {
+        return {
+          ...purchase,
+          usedUnits: Math.min(purchase.totalUnits, purchase.usedUnits + 1),
+        };
+      }
+
+      return purchase;
+    }),
+    activityEvents: [
+      {
+        id: `act-${crypto.randomUUID()}`,
+        actor,
+        clientId: existingSession?.primaryClientId,
+        type: "session.completed",
+        detail: `Marked ${existingSession?.title ?? "session"} as completed.`,
+        createdAt: timestamp(),
+      },
+      ...nextState.activityEvents,
+    ],
+  };
+}
+
 function formatAuthError(locale: Locale, error: unknown) {
   const message = error instanceof Error ? error.message : translate(locale, "auth.requestFailed");
 
@@ -1657,6 +1938,132 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("Initial workout generation failed.", error);
       persistInitialWorkout(buildLocalStarterWorkout(client));
+    }
+  }
+
+  async function regenerateSessionWorkout({
+    sessionId,
+    instructions,
+  }: {
+    sessionId: string;
+    instructions: string;
+  }) {
+    const snapshot = stateRef.current;
+    const bundle = getSessionBundle(snapshot, sessionId);
+    const normalizedInstructions = instructions.trim();
+
+    if (!bundle?.client || !bundle.sessionWorkout || !normalizedInstructions) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/ai/rework-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          locale: bundle.client.preferredLanguage,
+          client: bundle.client,
+          session: bundle.session,
+          plannedWorkout: bundle.plannedWorkout,
+          sessionWorkout: bundle.sessionWorkout,
+          recentAssessments: getClientAssessments(snapshot, bundle.client.id),
+          recentCompletedWorkouts: getRecentCompletedSessionBundles(
+            snapshot,
+            bundle.client.id,
+            7,
+          ),
+          instructions: normalizedInstructions,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Session workout regeneration failed.");
+      }
+
+      const payload = (await response.json()) as {
+        workout: GeneratedSessionDraft;
+      };
+
+      applyCRMUpdate((previous) =>
+        replaceSessionWorkoutState(previous, sessionId, payload.workout, "AI", {
+          activityType: "session.updated",
+          activityDetail: `AI rebuilt ${bundle.session.title} from the coach instruction.`,
+        }),
+      );
+      setCrmError(null);
+    } catch (error) {
+      console.error("Session workout regeneration failed.", error);
+      setCrmError(
+        error instanceof Error
+          ? error.message
+          : "The workout could not be rebuilt right now.",
+      );
+    }
+  }
+
+  async function generateNextWorkoutForClient(
+    clientId: string,
+    baseSnapshot?: CRMState,
+  ) {
+    const snapshot = baseSnapshot ?? stateRef.current;
+    const client = snapshot.clients.find((item) => item.id === clientId);
+    if (!client) {
+      return;
+    }
+
+    const recentCompletedWorkouts = getRecentCompletedSessionBundles(snapshot, clientId, 7);
+    if (recentCompletedWorkouts.length === 0) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/ai/next-workout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          locale: client.preferredLanguage,
+          client,
+          currentWorkoutPlan: getActiveWorkoutPlan(snapshot, clientId) ?? null,
+          recentAssessments: getClientAssessments(snapshot, clientId),
+          recentCompletedWorkouts,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Next workout generation failed.");
+      }
+
+      const payload = (await response.json()) as {
+        workout: GeneratedSessionDraft;
+      };
+
+      applyCRMUpdate((previous) =>
+        upsertGeneratedNextSession(previous, clientId, payload.workout, "AI"),
+      );
+      setCrmError(null);
+    } catch (error) {
+      console.error("Next workout generation failed.", error);
+      setCrmError(
+        error instanceof Error
+          ? error.message
+          : "The next workout could not be generated right now.",
+      );
+    }
+  }
+
+  async function completeSessionAndGenerateNext(sessionId: string) {
+    const snapshot = stateRef.current;
+    const session = snapshot.sessions.find((item) => item.id === sessionId);
+    if (!session || session.status === "completed") {
+      return;
+    }
+
+    const actor = snapshot.users[0]?.name ?? authUser?.email ?? "Coach";
+    const completedSnapshot = buildCompletedSessionState(snapshot, sessionId, actor);
+    applyCRMUpdate((previous) => buildCompletedSessionState(previous, sessionId, actor));
+
+    if (session.primaryClientId) {
+      await generateNextWorkoutForClient(session.primaryClientId, completedSnapshot);
     }
   }
 
@@ -2726,46 +3133,8 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           ],
         })),
       ),
-    completeSession: (sessionId) =>
-      applyCRMUpdate((previous) => {
-        const existingSession = previous.sessions.find((session) => session.id === sessionId);
-        const alreadyCompleted = existingSession?.status === "completed";
-        const nextState = updateWorkout(previous, sessionId, (workout) => ({
-          ...workout,
-          status: "completed",
-        }));
-
-        return {
-          ...nextState,
-          sessions: nextState.sessions.map((session) =>
-            session.id === sessionId ? { ...session, status: "completed" } : session,
-          ),
-          packagePurchases: nextState.packagePurchases.map((purchase) => {
-            if (
-              purchase.id === existingSession?.packagePurchaseId &&
-              !alreadyCompleted
-            ) {
-              return {
-                ...purchase,
-                usedUnits: Math.min(purchase.totalUnits, purchase.usedUnits + 1),
-              };
-            }
-
-            return purchase;
-          }),
-          activityEvents: [
-            {
-              id: `act-${crypto.randomUUID()}`,
-              actor: nextState.users[0]?.name ?? authUser?.email ?? "Coach",
-              clientId: existingSession?.primaryClientId,
-              type: "session.completed",
-              detail: `Marked ${existingSession?.title ?? "session"} as completed.`,
-              createdAt: timestamp(),
-            },
-            ...nextState.activityEvents,
-          ],
-        };
-      }),
+    regenerateSessionWorkout,
+    completeSession: completeSessionAndGenerateNext,
     refreshNutritionPlan,
     upsertDraft: (draft) =>
       applyCRMUpdate((previous) => {

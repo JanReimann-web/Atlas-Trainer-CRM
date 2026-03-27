@@ -219,6 +219,7 @@ export function WorkoutSessionScreen({
     updateSet,
     toggleExerciseState,
     addExercise,
+    regenerateSessionWorkout,
     completeSession,
     upsertDraft,
     updateDraft,
@@ -226,6 +227,10 @@ export function WorkoutSessionScreen({
   } = useCRM();
   const { t, locale, formatDate } = useLocaleContext();
   const [newExerciseName, setNewExerciseName] = useState("");
+  const [showReworkPanel, setShowReworkPanel] = useState(false);
+  const [reworkInstructions, setReworkInstructions] = useState("");
+  const [isReworking, setIsReworking] = useState(false);
+  const [isCompletingSession, setIsCompletingSession] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const bundle = getSessionBundle(state, sessionId);
@@ -262,6 +267,33 @@ export function WorkoutSessionScreen({
     session.startAt ? formatDate(session.startAt) : t("common.noDateYet"),
     session.location || `${t("fields.location")}: ${t("common.none")}`,
   ];
+
+  async function handleReworkWorkout() {
+    if (!reworkInstructions.trim()) {
+      return;
+    }
+
+    setIsReworking(true);
+    try {
+      await regenerateSessionWorkout({
+        sessionId: session.id,
+        instructions: reworkInstructions.trim(),
+      });
+      setReworkInstructions("");
+      setShowReworkPanel(false);
+    } finally {
+      setIsReworking(false);
+    }
+  }
+
+  async function handleCompleteSession() {
+    setIsCompletingSession(true);
+    try {
+      await completeSession(session.id);
+    } finally {
+      setIsCompletingSession(false);
+    }
+  }
 
   async function generateDraft(kind: DraftKind) {
     const endpoint =
@@ -324,10 +356,20 @@ export function WorkoutSessionScreen({
               <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={() => completeSession(session.id)}
-                  className="rounded-full bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-white"
+                  onClick={() => setShowReworkPanel((previous) => !previous)}
+                  title={t("workout.reworkToggleTitle")}
+                  aria-label={t("workout.reworkToggleTitle")}
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-[color:var(--line-soft)] bg-white/75 text-lg"
                 >
-                  {t("workout.completeSession")}
+                  🪄
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCompleteSession()}
+                  disabled={isCompletingSession || session.status === "completed"}
+                  className="rounded-full bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isCompletingSession ? t("workout.completing") : t("workout.completeSession")}
                 </button>
                 <Link
                   href={`/clients/${client.id}`}
@@ -338,6 +380,51 @@ export function WorkoutSessionScreen({
               </div>
             }
           >
+            {showReworkPanel ? (
+              <div className="mb-5 rounded-[26px] border border-[color:var(--line-soft)] bg-white/65 p-5">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-[color:var(--ink)]">
+                    {t("workout.reworkPanelTitle")}
+                  </p>
+                  <p className="text-sm text-[color:var(--muted-ink)]">
+                    {t("workout.reworkPanelSubtitle")}
+                  </p>
+                </div>
+                <div className="mt-4">
+                  <DataLabel label={t("workout.reworkInputLabel")}>
+                    <textarea
+                      value={reworkInstructions}
+                      onChange={(event) => setReworkInstructions(event.target.value)}
+                      placeholder={t("workout.reworkPlaceholder")}
+                      rows={4}
+                      className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/90 px-4 py-3 text-sm leading-6 outline-none"
+                    />
+                  </DataLabel>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void handleReworkWorkout()}
+                    disabled={isReworking || !reworkInstructions.trim()}
+                    className="rounded-full bg-[color:var(--clay)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isReworking ? t("workout.reworking") : t("workout.reworkAction")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowReworkPanel(false)}
+                    className="rounded-full bg-[color:var(--sand-2)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+                  >
+                    {t("common.cancel")}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            <p className="mb-5 text-sm text-[color:var(--muted-ink)]">
+              {t("workout.autoNextHint")}
+            </p>
+
             <div className="space-y-4">
               {sessionWorkout.exercises.map((exercise) => (
                 <div

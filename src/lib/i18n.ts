@@ -312,6 +312,7 @@ const messages: Record<Locale, DictionaryTree> = {
       addExercise: "Add exercise",
       addSet: "Add set",
       completeSession: "Mark session complete",
+      completing: "Completing and preparing next workout...",
       recapDraft: "Generate client recap",
       nextDraft: "Generate next-session guidance",
       emailLog: "Log edited draft to email timeline",
@@ -344,6 +345,17 @@ const messages: Record<Locale, DictionaryTree> = {
       removeSet: "Remove set",
       addLiveExercisePlaceholder: "Add a new live exercise",
       aiTools: "AI tools",
+      reworkToggleTitle: "Open AI workout rebuild",
+      reworkPanelTitle: "AI workout rebuild",
+      reworkPanelSubtitle:
+        "Add a coach instruction here when the current workout needs to be rebuilt before or during the session.",
+      reworkInputLabel: "Coach instruction for AI",
+      reworkPlaceholder:
+        "Example: replace squats with a knee-friendly lower-body option and keep total load moderate.",
+      reworkAction: "Rebuild current workout",
+      reworking: "Rebuilding workout...",
+      autoNextHint:
+        "When this session is marked complete, AI will automatically prepare the next workout using up to the last 7 completed sessions and coach notes.",
       scheduleSession: "Schedule this session",
       scheduleDetails: "Schedule details",
       schedulePendingHint:
@@ -797,6 +809,7 @@ const messages: Record<Locale, DictionaryTree> = {
       addExercise: "Lisa harjutus",
       addSet: "Lisa seeria",
       completeSession: "Märgi sessioon tehtuks",
+      completing: "Lõpetan sessiooni ja valmistan järgmise trenni...",
       recapDraft: "Genereeri kliendikokkuvõte",
       nextDraft: "Genereeri järgmise trenni soovitus",
       emailLog: "Lisa muudetud mustand e-posti ajalukku",
@@ -828,6 +841,17 @@ const messages: Record<Locale, DictionaryTree> = {
       removeSet: "Eemalda seeria",
       addLiveExercisePlaceholder: "Lisa uus live-harjutus",
       aiTools: "AI tööriistad",
+      reworkToggleTitle: "Ava AI treeningu ümbertegemine",
+      reworkPanelTitle: "AI treeningu ümbertegemine",
+      reworkPanelSubtitle:
+        "Lisa siia treeneri täpsustus, kui praegune treening tuleb enne või keset sessiooni ümber teha.",
+      reworkInputLabel: "Treeneri juhis AI-le",
+      reworkPlaceholder:
+        "Näide: asenda kükid põlvesõbralikuma alakeha variandiga ja hoia kogukoormus mõõdukas.",
+      reworkAction: "Tee praegune treening ümber",
+      reworking: "Teen treeningut ümber...",
+      autoNextHint:
+        "Kui see sessioon märgitakse tehtuks, koostab AI automaatselt järgmise trenni, võttes arvesse kuni viimast 7 lõpetatud treeningut ja treeneri märkusi.",
       scheduleSession: "Ajasta see sessioon",
       scheduleDetails: "Sessiooni ajastus",
       schedulePendingHint:
