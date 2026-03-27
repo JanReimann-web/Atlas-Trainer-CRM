@@ -158,12 +158,16 @@ export function CalendarScreen() {
                               href={`/clients/${session.primaryClientId}/sessions/${session.id}`}
                               className="block rounded-[22px] bg-[color:var(--sand-2)] p-4"
                             >
-                              <div className="flex items-center justify-between gap-3">
-                                <div>
-                                  <p className="font-semibold text-[color:var(--ink)]">{session.title}</p>
-                                  <p className="text-sm text-[color:var(--muted-ink)]">{client?.fullName}</p>
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="break-words font-semibold text-[color:var(--ink)]">
+                                    {session.title}
+                                  </p>
+                                  <p className="break-words text-sm text-[color:var(--muted-ink)]">
+                                    {client?.fullName}
+                                  </p>
                                 </div>
-                                <div className="space-x-2">
+                                <div className="flex flex-wrap gap-2 sm:justify-end">
                                   <StatusBadge status={session.status} />
                                   <StatusBadge status={session.calendarSync} />
                                 </div>

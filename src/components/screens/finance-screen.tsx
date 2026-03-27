@@ -70,17 +70,19 @@ export function FinanceScreen() {
               const amountDue = getInvoiceOutstandingAmount(state, invoice);
               return (
                 <div key={invoice.id} className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-[color:var(--ink)]">{client?.fullName}</p>
-                      <p className="text-sm text-[color:var(--muted-ink)]">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="break-words font-semibold text-[color:var(--ink)]">
+                        {client?.fullName}
+                      </p>
+                      <p className="break-words text-sm text-[color:var(--muted-ink)]">
                         {invoice.source === "session-debt"
                           ? `${t("finance.sessionDebtLabel")} / ${linkedSession?.title ?? invoice.description ?? invoice.id}`
                           : `${t("finance.packageInvoiceLabel")} / ${template?.name ?? invoice.id}`}{" "}
                         / {formatDate(invoice.dueAt)}
                       </p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-left sm:text-right">
                       <p className="font-semibold text-[color:var(--ink)]">{formatCurrency(amountDue)}</p>
                       <p className="text-sm text-[color:var(--muted-ink)]">
                         {formatCurrency(invoice.amount)}
@@ -129,8 +131,8 @@ export function FinanceScreen() {
             <div className="grid gap-3">
               {state.packageTemplates.map((template) => (
                 <div key={template.id} className="rounded-[22px] bg-white/60 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold text-[color:var(--ink)]">{template.name}</p>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="break-words font-semibold text-[color:var(--ink)]">{template.name}</p>
                     <p className="text-sm text-[color:var(--muted-ink)]">{formatCurrency(template.price)}</p>
                   </div>
                 </div>

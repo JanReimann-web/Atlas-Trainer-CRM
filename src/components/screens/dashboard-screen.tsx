@@ -90,13 +90,15 @@ export function DashboardScreen() {
                   className="block rounded-[24px] border border-[color:var(--line-soft)] bg-white/65 p-4 transition hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(34,48,38,0.12)]"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-[color:var(--ink)]">{session.title}</p>
-                      <p className="text-sm leading-6 text-[color:var(--muted-ink)]">
+                    <div className="min-w-0">
+                      <p className="break-words font-semibold text-[color:var(--ink)]">
+                        {session.title}
+                      </p>
+                      <p className="break-words text-sm leading-6 text-[color:var(--muted-ink)]">
                         {client?.fullName} / {session.location}
                       </p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex min-w-0 flex-wrap items-center gap-3 sm:justify-end">
                       <StatusBadge status={session.status} />
                       <span className="text-sm text-[color:var(--muted-ink)]">
                         {formatDate(session.startAt)}
@@ -146,10 +148,14 @@ export function DashboardScreen() {
                     }
                     className="block rounded-[22px] border border-[color:var(--line-soft)] bg-white/60 p-4"
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-[color:var(--ink)]">{draft.title}</p>
-                        <p className="text-sm text-[color:var(--muted-ink)]">{draft.subject}</p>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="break-words font-semibold text-[color:var(--ink)]">
+                          {draft.title}
+                        </p>
+                        <p className="break-words text-sm text-[color:var(--muted-ink)]">
+                          {draft.subject}
+                        </p>
                       </div>
                       <StatusBadge status={draft.status} />
                     </div>

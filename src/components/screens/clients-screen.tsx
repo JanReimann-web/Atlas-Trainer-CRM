@@ -244,16 +244,18 @@ export function ClientsScreen() {
                     className="panel-surface rounded-[28px] p-5 transition hover:-translate-y-0.5"
                   >
                     <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-center gap-4">
+                      <div className="flex min-w-0 items-center gap-4">
                         <div
-                          className="h-14 w-14 rounded-[20px]"
+                          className="h-14 w-14 shrink-0 rounded-[20px]"
                           style={{
                             background: `linear-gradient(135deg, hsl(${client.avatarHue} 78% 75%), hsl(${client.avatarHue + 30} 82% 58%))`,
                           }}
                         />
-                        <div>
-                          <p className="text-lg font-semibold text-[color:var(--ink)]">{client.fullName}</p>
-                          <p className="text-sm text-[color:var(--muted-ink)]">
+                        <div className="min-w-0">
+                          <p className="break-words text-lg font-semibold text-[color:var(--ink)]">
+                            {client.fullName}
+                          </p>
+                          <p className="break-words text-sm text-[color:var(--muted-ink)]">
                             {client.tags.join(" / ") || t("common.none")}
                           </p>
                         </div>

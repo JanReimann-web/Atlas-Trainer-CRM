@@ -206,7 +206,9 @@ export function StatCard({
         {value}
       </p>
       {detail ? (
-        <p className="mt-2 text-sm leading-6 text-[color:var(--muted-ink)]">{detail}</p>
+        <p className="mt-2 break-words text-sm leading-6 text-[color:var(--muted-ink)]">
+          {detail}
+        </p>
       ) : null}
     </div>
   );
@@ -236,7 +238,7 @@ export function SectionCard({
             {help ? <InfoHint content={help} /> : null}
           </div>
           {subtitle ? (
-            <p className="max-w-2xl text-sm leading-6 text-[color:var(--muted-ink)]">
+            <p className="max-w-2xl break-words text-sm leading-6 text-[color:var(--muted-ink)]">
               {subtitle}
             </p>
           ) : null}
@@ -257,8 +259,8 @@ export function EmptyState({
 }) {
   return (
     <div className="rounded-[24px] border border-dashed border-[color:var(--line-soft)] bg-white/50 p-6 text-sm leading-6 text-[color:var(--muted-ink)]">
-      <p className="font-semibold text-[color:var(--ink)]">{title}</p>
-      <p className="mt-2">{body}</p>
+      <p className="break-words font-semibold text-[color:var(--ink)]">{title}</p>
+      <p className="mt-2 break-words">{body}</p>
     </div>
   );
 }
@@ -403,7 +405,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </aside>
 
-        <div className="space-y-6 pb-[calc(env(safe-area-inset-bottom)+6.5rem)] lg:pb-0">
+        <div className="min-w-0 space-y-6 pb-[calc(env(safe-area-inset-bottom)+6.5rem)] lg:pb-0">
           <div className="space-y-4 lg:hidden">
             {nextSession ? (
               <Link
@@ -438,7 +440,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          <main>{children}</main>
+          <main className="min-w-0">{children}</main>
         </div>
       </div>
 

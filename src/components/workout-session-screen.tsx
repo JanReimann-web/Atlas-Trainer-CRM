@@ -461,8 +461,8 @@ export function WorkoutSessionScreen({
                     </button>
                   </div>
 
-                  <div className="mt-4 overflow-x-auto">
-                    <table className="min-w-full text-sm">
+                  <div className="mt-4 overflow-x-auto pb-1">
+                    <table className="min-w-[720px] text-sm">
                       <thead>
                         <tr className="text-left text-[color:var(--muted-ink)]">
                           <th className="pb-3 pr-3">{t("workout.setColumn")}</th>
