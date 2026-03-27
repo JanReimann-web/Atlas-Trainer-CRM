@@ -11,14 +11,18 @@ import {
   StatusBadge,
 } from "@/components/crm-ui";
 import {
+  getActivePackagePurchase,
   getClient,
   getClientAssessments,
   getClientDrafts,
   getClientNutritionPlans,
+  getClientOutstandingInvoices,
+  getClientOutstandingRevenue,
   getClientPurchases,
   getClientSessions,
   getClientUpcomingSession,
   getClientWorkoutPlans,
+  getInvoiceOutstandingAmount,
   getPackageTemplate,
   getPurchaseLinkedClientIds,
   getRemainingUnits,
@@ -470,7 +474,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
   const availableSharedClients = state.clients
     .filter((item) => item.id !== clientId)
     .sort((left, right) => left.fullName.localeCompare(right.fullName));
-  const activePurchase = purchases[0];
+  const activePurchase = getActivePackagePurchase(state, clientId);
   const activePurchaseTemplate = activePurchase
     ? getPackageTemplate(state, activePurchase.templateId)
     : null;
@@ -484,6 +488,22 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
         .map((linkedClientId) => getClient(state, linkedClientId)?.fullName)
         .filter(Boolean)
     : [];
+  const outstandingInvoices = getClientOutstandingInvoices(state, clientId);
+  const clientOutstanding = getClientOutstandingRevenue(state, clientId);
+  const uncoveredSessionInvoices = outstandingInvoices.filter(
+    (invoice) => invoice.source === "session-debt",
+  );
+  const packageStatBaseDetail = activePurchase
+    ? activePurchase.clientId !== clientId && activePurchaseOwner
+      ? `${activePurchaseTemplate?.name} / ${t("clientProfile.sharedPurchasePaidBy")}: ${activePurchaseOwner.fullName}`
+      : activePurchaseSharedClients.length > 0
+        ? `${activePurchaseTemplate?.name} / ${t("clientProfile.sharedPurchaseWith")}: ${activePurchaseSharedClients.join(", ")}`
+        : `${activePurchaseTemplate?.name} / ${t("clientProfile.activePackageDetail")}`
+    : t("clientProfile.noActivePackage");
+  const packageStatDetail =
+    clientOutstanding > 0
+      ? `${packageStatBaseDetail} / ${t("clientProfile.openBalance")}: ${formatCurrency(clientOutstanding)}`
+      : packageStatBaseDetail;
 
   useEffect(() => {
     if (!client || nutritionPlan || assessments.length === 0) {
@@ -910,15 +930,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
         <StatCard
           label={t("clients.packageLabel")}
           value={String(activePurchase ? getRemainingUnits(activePurchase) : 0)}
-          detail={
-            activePurchase
-              ? activePurchase.clientId !== clientId && activePurchaseOwner
-                ? `${activePurchaseTemplate?.name} / ${t("clientProfile.sharedPurchasePaidBy")}: ${activePurchaseOwner.fullName}`
-                : activePurchaseSharedClients.length > 0
-                  ? `${activePurchaseTemplate?.name} / ${t("clientProfile.sharedPurchaseWith")}: ${activePurchaseSharedClients.join(", ")}`
-                  : `${activePurchaseTemplate?.name} / ${t("clientProfile.activePackageDetail")}`
-              : t("clientProfile.noActivePackage")
-          }
+          detail={packageStatDetail}
         />
         <StatCard
           label={t("clients.nextSession")}
@@ -1187,6 +1199,70 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
 
         <SectionCard title={t("clientProfile.packages")} help={t("help.packageBalance")}>
           <div className="space-y-4">
+            {clientOutstanding > 0 ? (
+              <div className="rounded-[24px] border border-rose-200 bg-rose-50 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-rose-900">
+                      {t("clientProfile.openBalance")}
+                    </p>
+                    <p className="mt-1 text-sm leading-6 text-rose-900/85">
+                      {uncoveredSessionInvoices.length > 0
+                        ? `${uncoveredSessionInvoices.length} ${t("clientProfile.uncoveredSessionCount")}`
+                        : t("clientProfile.openBalancePackageOnly")}
+                    </p>
+                  </div>
+                  <p className="font-semibold text-rose-900">
+                    {formatCurrency(clientOutstanding)}
+                  </p>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  {outstandingInvoices.map((invoice) => {
+                    const purchase = invoice.packagePurchaseId
+                      ? state.packagePurchases.find((item) => item.id === invoice.packagePurchaseId)
+                      : null;
+                    const template = purchase
+                      ? getPackageTemplate(state, purchase.templateId)
+                      : null;
+                    const linkedSession = invoice.sessionId
+                      ? sessions.find((session) => session.id === invoice.sessionId)
+                      : null;
+
+                    return (
+                      <div
+                        key={invoice.id}
+                        className="rounded-[20px] border border-rose-200 bg-white/80 p-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="font-medium text-[color:var(--ink)]">
+                              {invoice.source === "session-debt"
+                                ? `${t("clientProfile.sessionDebtLabel")}: ${linkedSession?.title ?? invoice.description ?? invoice.id}`
+                                : `${t("clientProfile.packageInvoiceLabel")}: ${template?.name ?? invoice.id}`}
+                            </p>
+                            <p className="mt-1 text-sm text-[color:var(--muted-ink)]">
+                              {invoice.source === "session-debt"
+                                ? formatDate(
+                                    linkedSession?.endAt || linkedSession?.startAt || invoice.issuedAt,
+                                  )
+                                : `${formatDate(invoice.issuedAt)} / ${formatDate(invoice.dueAt)}`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <StatusBadge status={invoice.paymentStatus} />
+                            <span className="text-sm font-semibold text-rose-900">
+                              {formatCurrency(getInvoiceOutstandingAmount(state, invoice))}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
             {purchases.length === 0 ? (
               <EmptyState title={t("common.none")} body={t("clientProfile.noPurchaseHistory")} />
             ) : (

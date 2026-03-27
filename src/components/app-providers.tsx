@@ -31,9 +31,12 @@ import { saveCRMState, subscribeToCRMState } from "@/lib/firebase/crm-store";
 import { initialCRMState } from "@/lib/mock-data";
 import { translate } from "@/lib/i18n";
 import {
+  buildPackageAllocation,
   getClientAssessments,
   getClientNutritionPlans,
   getClientSessions,
+  getInvoicePaidAmount,
+  getSessionUnitPrice,
   getSessionBundle,
 } from "@/lib/selectors";
 import {
@@ -915,7 +918,7 @@ function createWorkoutSessionState(
     note: input.sessionNote?.trim() || input.objective.trim() || undefined,
   };
 
-  return {
+  return reconcileBillingState({
     ...previous,
     trainingLocations,
     sessions: [nextSession, ...previous.sessions],
@@ -936,14 +939,6 @@ function createWorkoutSessionState(
             ...previous.reminders,
           ]
         : previous.reminders,
-    packagePurchases: previous.packagePurchases.map((purchase) =>
-      purchase.id === input.packagePurchaseId && input.status === "completed"
-        ? {
-            ...purchase,
-            usedUnits: Math.min(purchase.totalUnits, purchase.usedUnits + 1),
-          }
-        : purchase,
-    ),
     activityEvents: [
       {
         id: `act-${crypto.randomUUID()}`,
@@ -961,6 +956,117 @@ function createWorkoutSessionState(
       },
       ...previous.activityEvents,
     ],
+  });
+}
+
+function deriveInvoicePaymentStatus(
+  fallbackStatus: CRMState["invoiceRecords"][number]["paymentStatus"],
+  paidAmount: number,
+  totalAmount: number,
+): CRMState["invoiceRecords"][number]["paymentStatus"] {
+  if (paidAmount >= totalAmount) {
+    return "paid";
+  }
+
+  if (paidAmount > 0) {
+    return fallbackStatus === "overdue" ? "overdue" : "partial";
+  }
+
+  return fallbackStatus === "overdue" ? "overdue" : "pending";
+}
+
+function reconcileBillingState(previous: CRMState): CRMState {
+  const allocation = buildPackageAllocation(previous);
+  const existingInvoices = previous.invoiceRecords;
+
+  const packageInvoices: CRMState["invoiceRecords"] = previous.packagePurchases.map((purchase) => {
+    const existingInvoice =
+      existingInvoices.find(
+        (invoice) =>
+          (invoice.source ?? "package") === "package" &&
+          (invoice.packagePurchaseId === purchase.id || invoice.id === purchase.invoiceId),
+      ) ?? null;
+    const invoiceId = existingInvoice?.id ?? purchase.invoiceId;
+    const paidAmount = getInvoicePaidAmount(previous, invoiceId);
+    const paymentStatus = deriveInvoicePaymentStatus(
+      existingInvoice?.paymentStatus ?? purchase.paymentStatus,
+      paidAmount,
+      purchase.price,
+    );
+
+    return {
+      id: invoiceId,
+      clientId: purchase.clientId,
+      packagePurchaseId: purchase.id,
+      issuedAt: existingInvoice?.issuedAt ?? purchase.purchasedAt,
+      dueAt: existingInvoice?.dueAt ?? addDays(purchase.purchasedAt, 3),
+      amount: purchase.price,
+      currency: "EUR",
+      paymentStatus,
+      source: "package",
+      description: existingInvoice?.description,
+    };
+  });
+
+  const sessionDebtInvoices: CRMState["invoiceRecords"] = previous.sessions
+    .filter((session) => session.status === "completed")
+    .filter((session) => !allocation.packageBySessionId[session.id])
+    .map((session) => {
+      const existingInvoice =
+        existingInvoices.find(
+          (invoice) => invoice.source === "session-debt" && invoice.sessionId === session.id,
+        ) ?? null;
+      const billingMoment = session.endAt || session.startAt || timestamp();
+      const amount =
+        allocation.uncoveredAmountBySessionId[session.id] ??
+        getSessionUnitPrice(previous, session.kind);
+      const invoiceId = existingInvoice?.id ?? `inv-session-${crypto.randomUUID()}`;
+      const paidAmount = getInvoicePaidAmount(previous, invoiceId);
+
+      return {
+        id: invoiceId,
+        clientId: session.primaryClientId,
+        sessionId: session.id,
+        issuedAt: existingInvoice?.issuedAt ?? billingMoment,
+        dueAt: existingInvoice?.dueAt ?? billingMoment,
+        amount,
+        currency: "EUR",
+        paymentStatus: deriveInvoicePaymentStatus(
+          existingInvoice?.paymentStatus ?? "overdue",
+          paidAmount,
+          amount,
+        ),
+        source: "session-debt" as const,
+        description: `Uncovered ${session.kind} session: ${session.title}`,
+      };
+    });
+
+  const nextInvoiceRecords = [...sessionDebtInvoices, ...packageInvoices].sort((left, right) => {
+    const leftKey = left.issuedAt || left.dueAt;
+    const rightKey = right.issuedAt || right.dueAt;
+    return rightKey.localeCompare(leftKey);
+  });
+
+  return {
+    ...previous,
+    sessions: previous.sessions.map((session) =>
+      session.status === "completed"
+        ? {
+            ...session,
+            packagePurchaseId: allocation.packageBySessionId[session.id],
+          }
+        : session,
+    ),
+    packagePurchases: previous.packagePurchases.map((purchase) => {
+      const linkedInvoice = packageInvoices.find((invoice) => invoice.packagePurchaseId === purchase.id);
+      return {
+        ...purchase,
+        usedUnits: allocation.usedUnitsByPurchaseId[purchase.id] ?? 0,
+        paymentStatus: linkedInvoice?.paymentStatus ?? purchase.paymentStatus,
+        invoiceId: linkedInvoice?.id ?? purchase.invoiceId,
+      };
+    }),
+    invoiceRecords: nextInvoiceRecords,
   };
 }
 
@@ -1202,29 +1308,18 @@ function upsertGeneratedNextSession(
 
 function buildCompletedSessionState(previous: CRMState, sessionId: string, actor: string) {
   const existingSession = previous.sessions.find((session) => session.id === sessionId);
-  const alreadyCompleted = existingSession?.status === "completed";
   const nextState = updateWorkout(previous, sessionId, (workout) => ({
     ...workout,
     status: "completed",
   }));
 
-  return {
+  return reconcileBillingState({
     ...nextState,
     sessions: nextState.sessions.map((session) =>
       session.id === sessionId
         ? { ...session, status: "completed" as const }
         : session,
     ),
-    packagePurchases: nextState.packagePurchases.map((purchase) => {
-      if (purchase.id === existingSession?.packagePurchaseId && !alreadyCompleted) {
-        return {
-          ...purchase,
-          usedUnits: Math.min(purchase.totalUnits, purchase.usedUnits + 1),
-        };
-      }
-
-      return purchase;
-    }),
     activityEvents: [
       {
         id: `act-${crypto.randomUUID()}`,
@@ -1236,7 +1331,7 @@ function buildCompletedSessionState(previous: CRMState, sessionId: string, actor
       },
       ...nextState.activityEvents,
     ],
-  };
+  });
 }
 
 function formatAuthError(locale: Locale, error: unknown) {
@@ -1332,7 +1427,9 @@ function removeClientFromState(previous: CRMState, clientId: string): CRMState {
       .filter(
         (invoice) =>
           invoice.clientId === clientId ||
-          deletedPackagePurchaseIds.has(invoice.packagePurchaseId),
+          (invoice.packagePurchaseId
+            ? deletedPackagePurchaseIds.has(invoice.packagePurchaseId)
+            : false),
       )
       .map((invoice) => invoice.id),
   );
@@ -1441,7 +1538,8 @@ function removeClientFromState(previous: CRMState, clientId: string): CRMState {
     invoiceRecords: previous.invoiceRecords.filter(
       (invoice) =>
         invoice.clientId !== clientId &&
-        !deletedPackagePurchaseIds.has(invoice.packagePurchaseId),
+        (!invoice.packagePurchaseId ||
+          !deletedPackagePurchaseIds.has(invoice.packagePurchaseId)),
     ),
     paymentRecords: previous.paymentRecords.filter(
       (payment) =>
@@ -2794,7 +2892,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
               : input.paymentStatus;
         const now = timestamp();
 
-        return {
+        return reconcileBillingState({
           ...previous,
           packagePurchases: [
             {
@@ -2861,7 +2959,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
             },
             ...previous.activityEvents,
           ],
-        };
+        });
       }),
     addBodyAssessment: (input) => {
       const snapshot = stateRef.current;
@@ -2992,7 +3090,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         );
         const now = timestamp();
 
-        return {
+        return reconcileBillingState({
           ...previous,
           trainingLocations,
           sessions: previous.sessions.map((item) =>
@@ -3040,7 +3138,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
             },
             ...previous.activityEvents,
           ],
-        };
+        });
       }),
     convertLeadToClient: (leadId) => {
       const snapshot = stateRef.current;

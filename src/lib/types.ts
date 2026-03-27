@@ -388,12 +388,15 @@ export interface Reminder {
 export interface InvoiceRecord {
   id: string;
   clientId: string;
-  packagePurchaseId: string;
+  packagePurchaseId?: string;
+  sessionId?: string;
   issuedAt: string;
   dueAt: string;
   amount: number;
   currency: Currency;
   paymentStatus: PaymentStatus;
+  source?: "package" | "session-debt";
+  description?: string;
 }
 
 export interface PaymentRecord {

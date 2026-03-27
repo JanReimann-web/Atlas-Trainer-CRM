@@ -5,10 +5,12 @@ import { SectionCard, StatCard } from "@/components/crm-ui";
 import { getNextMonthKey, getLocalMonthKey } from "@/lib/date";
 import {
   getClient,
+  getInvoiceOutstandingAmount,
   getMonthlyRevenue,
   getMonthlyRevenueByMethod,
   getOutstandingRevenue,
   getPackageLiability,
+  getPackageTemplate,
   getRemainingUnits,
 } from "@/lib/selectors";
 import { PageLead, TimelineItem } from "@/components/screens/shared";
@@ -48,18 +50,42 @@ export function FinanceScreen() {
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <SectionCard title={t("finance.invoices")} help={t("help.finance")}>
           <div className="space-y-3">
-            {state.invoiceRecords.map((invoice) => {
+            {[...state.invoiceRecords]
+              .sort((left, right) => {
+                const leftKey = left.issuedAt || left.dueAt;
+                const rightKey = right.issuedAt || right.dueAt;
+                return rightKey.localeCompare(leftKey);
+              })
+              .map((invoice) => {
               const client = getClient(state, invoice.clientId);
+              const purchase = invoice.packagePurchaseId
+                ? state.packagePurchases.find((item) => item.id === invoice.packagePurchaseId)
+                : null;
+              const template = purchase
+                ? getPackageTemplate(state, purchase.templateId)
+                : null;
+              const linkedSession = invoice.sessionId
+                ? state.sessions.find((session) => session.id === invoice.sessionId)
+                : null;
+              const amountDue = getInvoiceOutstandingAmount(state, invoice);
               return (
                 <div key={invoice.id} className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="font-semibold text-[color:var(--ink)]">{client?.fullName}</p>
                       <p className="text-sm text-[color:var(--muted-ink)]">
-                        {invoice.id} / {formatDate(invoice.dueAt)}
+                        {invoice.source === "session-debt"
+                          ? `${t("finance.sessionDebtLabel")} / ${linkedSession?.title ?? invoice.description ?? invoice.id}`
+                          : `${t("finance.packageInvoiceLabel")} / ${template?.name ?? invoice.id}`}{" "}
+                        / {formatDate(invoice.dueAt)}
                       </p>
                     </div>
-                    <p className="font-semibold text-[color:var(--ink)]">{formatCurrency(invoice.amount)}</p>
+                    <div className="text-right">
+                      <p className="font-semibold text-[color:var(--ink)]">{formatCurrency(amountDue)}</p>
+                      <p className="text-sm text-[color:var(--muted-ink)]">
+                        {formatCurrency(invoice.amount)}
+                      </p>
+                    </div>
                   </div>
                 </div>
               );
