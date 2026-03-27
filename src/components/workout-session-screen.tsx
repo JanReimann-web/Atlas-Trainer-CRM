@@ -58,7 +58,7 @@ function DraftEditor({
   const { t } = useLocaleContext();
 
   return (
-    <div className="space-y-4 rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
+    <div className="min-w-0 max-w-full space-y-4 rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
       <p className="font-semibold text-[color:var(--ink)]">{title}</p>
       <DataLabel label={t("workout.draftSubject")}>
         <input
@@ -365,8 +365,8 @@ export function WorkoutSessionScreen({
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-        <div className="space-y-6">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
+        <div className="order-2 min-w-0 space-y-6 xl:order-1 xl:row-span-2">
           <SectionCard
             title={t("workout.title")}
             help={t("help.plannedActual")}
@@ -433,16 +433,18 @@ export function WorkoutSessionScreen({
               </div>
             ) : null}
 
-            <div className="space-y-4">
+            <div className="min-w-0 space-y-4">
               {sessionWorkout.exercises.map((exercise) => (
                 <div
                   key={exercise.id}
-                  className="rounded-[26px] border border-[color:var(--line-soft)] bg-white/70 p-5"
+                  className="min-w-0 max-w-full rounded-[26px] border border-[color:var(--line-soft)] bg-white/70 p-5"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-3">
-                        <p className="text-lg font-semibold text-[color:var(--ink)]">{exercise.name}</p>
+                        <p className="break-words text-lg font-semibold text-[color:var(--ink)]">
+                          {exercise.name}
+                        </p>
                         <StatusBadge status={exercise.status} />
                       </div>
                     </div>
@@ -461,7 +463,7 @@ export function WorkoutSessionScreen({
                     </button>
                   </div>
 
-                  <div className="mt-4 overflow-x-auto pb-1">
+                  <div className="mt-4 max-w-full overflow-x-auto pb-1">
                     <table className="min-w-[720px] text-sm">
                       <thead>
                         <tr className="text-left text-[color:var(--muted-ink)]">
@@ -554,12 +556,12 @@ export function WorkoutSessionScreen({
               ))}
             </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-[1fr_auto]">
+            <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
               <input
                 value={newExerciseName}
                 onChange={(event) => setNewExerciseName(event.target.value)}
                 placeholder={t("workout.addLiveExercisePlaceholder")}
-                className="rounded-2xl border border-[color:var(--line-soft)] bg-white/90 px-4 py-3 text-sm outline-none"
+                className="min-w-0 rounded-2xl border border-[color:var(--line-soft)] bg-white/90 px-4 py-3 text-sm outline-none"
               />
               <button
                 type="button"
@@ -601,7 +603,7 @@ export function WorkoutSessionScreen({
           </SectionCard>
         </div>
 
-        <div className="space-y-6">
+        <div className="order-1 min-w-0 xl:order-2">
           <SessionScheduleCard
             key={`${session.id}-${session.startAt}-${session.endAt}-${session.location}`}
             session={session}
@@ -614,6 +616,9 @@ export function WorkoutSessionScreen({
             }
           />
 
+        </div>
+
+        <div className="order-4 min-w-0 xl:order-3">
           {summaryDraft ? (
             <SectionCard
               title={t("workout.summaryCardTitle")}
@@ -637,9 +642,7 @@ export function WorkoutSessionScreen({
                 actionDetail={t("workout.saveAndCopyHint")}
               />
             </SectionCard>
-          ) : null}
-
-          {!summaryDraft ? (
+          ) : (
             <SectionCard
               title={t("workout.summaryCardTitle")}
               help={t("help.aiDrafts")}
@@ -649,7 +652,7 @@ export function WorkoutSessionScreen({
                 body={t("workout.summaryPendingBody")}
               />
             </SectionCard>
-          ) : null}
+          )}
         </div>
       </div>
     </div>

@@ -229,7 +229,7 @@ export function SectionCard({
   children: ReactNode;
 }) {
   return (
-    <section className="panel-surface min-w-0 rounded-[26px] p-4 sm:rounded-[30px] sm:p-6">
+    <section className="panel-surface min-w-0 max-w-full overflow-hidden rounded-[26px] p-4 sm:rounded-[30px] sm:p-6">
       <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0 space-y-2">
           <div className="flex items-center gap-2">
@@ -276,7 +276,7 @@ export function DataLabel({
   children?: ReactNode;
 }) {
   return (
-    <label className="space-y-2 text-sm">
+    <label className="min-w-0 space-y-2 text-sm">
       <span className="flex items-center gap-2 font-medium text-[color:var(--ink)]">
         {label}
         {help ? <InfoHint content={help} /> : null}
