@@ -74,6 +74,11 @@ function DraftEditor({
           className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/90 px-4 py-3 text-sm leading-6 outline-none"
         />
       </DataLabel>
+      <DataLabel label={t("workout.draftPreview")}>
+        <div className="whitespace-pre-wrap rounded-2xl border border-[color:var(--line-soft)] bg-[color:var(--sand-2)]/45 px-4 py-4 text-sm leading-7 text-[color:var(--ink)]">
+          {body}
+        </div>
+      </DataLabel>
       <DataLabel label={t("workout.internalNote")}>
         <textarea
           value={internalNote ?? ""}

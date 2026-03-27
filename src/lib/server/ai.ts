@@ -1202,6 +1202,159 @@ function buildRecentCoachNotesSummary(recentCompletedWorkouts: CompletedWorkoutC
     .slice(0, 3);
 }
 
+function formatKgValue(value: number) {
+  const fixed = Number.isInteger(value) ? String(value) : value.toFixed(1);
+  return fixed.replace(/\.0$/u, "");
+}
+
+function buildExerciseExecutionLine(
+  locale: Locale,
+  exercise: SessionWorkout["exercises"][number],
+) {
+  const actualSets = exercise.sets.filter((set) => {
+    const hasActualReps = Boolean(set.actualReps.trim());
+    const hasActualWeight =
+      typeof set.actualWeightKg === "number" && Number.isFinite(set.actualWeightKg);
+    const hasRpe = typeof set.rpe === "number" && Number.isFinite(set.rpe);
+    return set.completed || hasActualReps || hasActualWeight || hasRpe;
+  });
+
+  const relevantSets =
+    actualSets.length > 0
+      ? actualSets
+      : exercise.status === "skipped"
+        ? []
+        : exercise.sets;
+
+  if (relevantSets.length === 0) {
+    return null;
+  }
+
+  const reps = relevantSets
+    .map((set) => set.actualReps.trim() || set.targetReps.trim())
+    .filter(Boolean);
+  const weights = relevantSets
+    .map((set) => set.actualWeightKg ?? set.targetWeightKg)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+    .map(formatKgValue);
+  const rpes = relevantSets
+    .map((set) => set.rpe)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+    .map((value) => String(value));
+
+  const parts: string[] = [];
+
+  if (reps.length > 0) {
+    const uniqueReps = [...new Set(reps)];
+    parts.push(uniqueReps.length === 1 ? `${relevantSets.length} x ${uniqueReps[0]}` : `${locale === "et" ? "kordused" : "reps"} ${reps.join(" / ")}`);
+  } else {
+    parts.push(locale === "et" ? `${relevantSets.length} seeriat` : `${relevantSets.length} sets`);
+  }
+
+  if (weights.length > 0) {
+    const uniqueWeights = [...new Set(weights)];
+    parts.push(
+      uniqueWeights.length === 1
+        ? `@ ${uniqueWeights[0]} kg`
+        : `${locale === "et" ? "raskus" : "load"} ${weights.join(" / ")} kg`,
+    );
+  }
+
+  if (rpes.length > 0) {
+    const uniqueRpes = [...new Set(rpes)];
+    parts.push(uniqueRpes.length === 1 ? `RPE ${uniqueRpes[0]}` : `RPE ${rpes.join(" / ")}`);
+  }
+
+  if (exercise.status === "modified") {
+    parts.push(locale === "et" ? "kohandatud treeningu käigus" : "adjusted during the session");
+  }
+
+  if (exercise.status === "added") {
+    parts.push(locale === "et" ? "lisatud kohapeal" : "added live");
+  }
+
+  const note = exercise.note?.trim();
+  const noteLabel = locale === "et" ? "Märkus" : "Note";
+
+  return `${exercise.name}: ${parts.join(", ")}${note ? `. ${noteLabel}: ${note}` : ""}`;
+}
+
+function buildCompletedExerciseLines(
+  locale: Locale,
+  sessionWorkout?: SessionWorkout | null,
+) {
+  const lines =
+    sessionWorkout?.exercises
+      .filter((exercise) => exercise.status !== "skipped")
+      .map((exercise) => buildExerciseExecutionLine(locale, exercise))
+      .filter((line): line is string => Boolean(line)) ?? [];
+
+  if (lines.length === 0) {
+    return [
+      locale === "et"
+        ? "1. Harjutuste detailid puuduvad, kuid sessioon märgiti tehtuks."
+        : "1. Exercise details are missing, but the session was marked complete.",
+    ];
+  }
+
+  return lines.map((line, index) => `${index + 1}. ${line}`);
+}
+
+function buildStructuredWorkoutSummaryBody(input: WorkoutSummaryInput) {
+  const { client, locale, session, sessionWorkout, plannedWorkout, assessments } = input;
+  const completion = sessionWorkout
+    ? sessionWorkout.exercises.flatMap((exercise) => exercise.sets).filter((set) => set.completed)
+        .length
+    : 0;
+  const totalSets = sessionWorkout
+    ? sessionWorkout.exercises.flatMap((exercise) => exercise.sets).length
+    : 0;
+  const adjustments = summarizeExerciseAdjustments(sessionWorkout?.exercises ?? []);
+  const latestAssessment = getLatestAssessment(assessments);
+  const objective = plannedWorkout?.objective ?? session.title;
+  const exerciseLines = buildCompletedExerciseLines(locale, sessionWorkout);
+
+  if (locale === "et") {
+    const focusSentence = `${client.fullName}, tänase treeningu fookus oli ${objective}. Tegid ära ${completion}/${totalSets} planeeritud seeriast${adjustments.modified > 0 ? ` ning kohandasime ${adjustments.modified} harjutust vastavalt tänasele enesetundele.` : "."}`;
+    const nextStepSentence = latestAssessment
+      ? `Jätkame sama suunda, sest viimane kehaanalüüs toetab seda: ${latestAssessment.notes}`
+      : "Jätkame sama suunda ja jälgime, kuidas keha taastub järgmise treeninguni.";
+
+    return [
+      `Hei ${client.fullName},`,
+      "",
+      "Tänase treeningu fookus:",
+      focusSentence,
+      "",
+      "Tehtud harjutused:",
+      ...exerciseLines,
+      "",
+      "Järgmine samm:",
+      nextStepSentence,
+      "Anna õhtul või homme hommikul märku, kuidas enesetunne püsib.",
+    ].join("\n");
+  }
+
+  const focusSentence = `${client.fullName}, today's session focused on ${objective}. You completed ${completion}/${totalSets} planned sets${adjustments.modified > 0 ? ` and we adjusted ${adjustments.modified} exercises to match how you were moving and feeling.` : "."}`;
+  const nextStepSentence = latestAssessment
+    ? `We will keep building in the same direction because your latest body assessment supports it: ${latestAssessment.notes}`
+    : "We will keep building from the same direction and monitor recovery before the next session.";
+
+  return [
+    `Hi ${client.fullName},`,
+    "",
+    "Today's session focus:",
+    focusSentence,
+    "",
+    "Completed exercises:",
+    ...exerciseLines,
+    "",
+    "Next step:",
+    nextStepSentence,
+    "Send me a short note later today or tomorrow morning about how your body feels.",
+  ].join("\n");
+}
+
 function buildRecentSessionLabel(
   locale: Locale,
   recentCompletedWorkouts: CompletedWorkoutContext[],
@@ -1550,13 +1703,6 @@ async function enhanceStructuredWorkoutWithOpenAI(
 
 function buildFallbackWorkoutSummaryDraft(input: WorkoutSummaryInput) {
   const { client, locale, session, sessionWorkout, plannedWorkout, assessments } = input;
-  const completion = sessionWorkout
-    ? sessionWorkout.exercises.flatMap((exercise) => exercise.sets).filter((set) => set.completed)
-        .length
-    : 0;
-  const totalSets = sessionWorkout
-    ? sessionWorkout.exercises.flatMap((exercise) => exercise.sets).length
-    : 0;
   const adjustments = summarizeExerciseAdjustments(sessionWorkout?.exercises ?? []);
   const latestAssessment = getLatestAssessment(assessments);
 
@@ -1568,17 +1714,7 @@ function buildFallbackWorkoutSummaryDraft(input: WorkoutSummaryInput) {
       session.id,
       "Treeningu kokkuvõte",
       "Tänase treeningu lühikokkuvõte",
-      [
-        `${client.fullName}, tänase sessiooni fookus oli ${plannedWorkout?.objective ?? session.title}.`,
-        `Tegid ära ${completion}/${totalSets} planeeritud seeriast.`,
-        adjustments.modified > 0
-          ? `Treeningu jooksul kohandati ${adjustments.modified} harjutust vastavalt enesetundele või koormusele.`
-          : "Treening kulges peaaegu täielikult plaani järgi.",
-        latestAssessment
-          ? `Viimase kehaanalüüsi trend toetab praegust suunda: ${latestAssessment.notes}`
-          : "Jätkame sama suuna hoidmist ja taastumise jälgimist.",
-        "Palun anna õhtul või homme hommikul märku, kuidas enesetunne püsib.",
-      ].join("\n\n"),
+      buildStructuredWorkoutSummaryBody(input),
       [
         sessionWorkout?.coachNote
           ? `Treeneri märge: ${sessionWorkout.coachNote}`
@@ -1603,17 +1739,7 @@ function buildFallbackWorkoutSummaryDraft(input: WorkoutSummaryInput) {
     session.id,
     "Post-session recap",
     "Quick recap from today’s session",
-    [
-      `${client.fullName}, today’s focus was ${plannedWorkout?.objective ?? session.title}.`,
-      `You completed ${completion} out of ${totalSets} planned sets.`,
-      adjustments.modified > 0
-        ? `${adjustments.modified} exercises were adjusted during the session to match how you were moving and feeling.`
-        : "The session stayed very close to the original plan.",
-      latestAssessment
-        ? `Your latest body assessment supports this direction: ${latestAssessment.notes}`
-        : "We will keep building from the same baseline next session.",
-      "Send me a short note later today if anything feels unusually sore or unusually easy.",
-    ].join("\n\n"),
+    buildStructuredWorkoutSummaryBody(input),
     [
       sessionWorkout?.coachNote
         ? `Coach note: ${sessionWorkout.coachNote}`
@@ -1767,11 +1893,17 @@ export async function buildWorkoutSummaryDraft(input: WorkoutSummaryInput) {
     return await enhanceDraftWithOpenAI(
       fallback,
       input.locale === "et"
-        ? "Koosta kliendile lühike, konkreetne treeningu kokkuvõtte mustand ning lisa treenerile eraldi sisemine märkus. Hoia toon professionaalne, sõbralik ja konkreetne."
-        : "Write a short, specific post-session recap draft for the client and a separate internal coaching note. Keep the tone professional, clear, and supportive.",
+        ? 'Koosta kliendile lühike, konkreetne treeningu kokkuvõtte mustand ning lisa treenerile eraldi sisemine märkus. Body peab olema plain-text e-kirja sisu kolme selge sektsiooniga ja tühja reaga sektsioonide vahel: "Tänase treeningu fookus:", "Tehtud harjutused:", "Järgmine samm:". "Tehtud harjutused" sektsioonis kirjelda iga tehtud harjutus eraldi nummerdatud real ning kasuta olemasolevaid tegelikke kordusi, raskusi, kestust ja RPE infot, kui see on olemas. Hoia toon professionaalne, sõbralik ja konkreetne.'
+        : 'Write a short, specific post-session recap draft for the client and a separate internal coaching note. The body must be plain-text email copy with three clear sections separated by blank lines: "Today\'s session focus:", "Completed exercises:", and "Next step:". In "Completed exercises", list each performed exercise on its own numbered line and use the available actual reps, load, duration, and RPE details whenever they exist. Keep the tone professional, clear, and supportive.',
       {
         locale: input.locale,
         type: "workout-summary",
+        fallbackDraft: {
+          title: fallback.title,
+          subject: fallback.subject,
+          body: fallback.body,
+          internalNote: fallback.internalNote,
+        },
         client: input.client,
         session: input.session,
         plannedWorkout: input.plannedWorkout,
