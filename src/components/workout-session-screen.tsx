@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useCRM, useLocaleContext } from "@/components/app-providers";
 import {
   DataLabel,
@@ -11,13 +10,12 @@ import {
   StatusBadge,
 } from "@/components/crm-ui";
 import {
-  getClientAssessments,
   getSessionBundle,
   getSessionCompletion,
   summarizeExerciseAdjustments,
 } from "@/lib/selectors";
 import { getDateInputValueFromIso, getTimeInputValueFromIso } from "@/lib/date";
-import { Session, TrainingLocation } from "@/lib/types";
+import { AIDraft, Session, TrainingLocation } from "@/lib/types";
 import { PageLead } from "@/components/screens/shared";
 
 function durationInputFromSession(startAt?: string, endAt?: string) {
@@ -42,8 +40,9 @@ function DraftEditor({
   body,
   internalNote,
   onChange,
-  onSend,
-  sendLabel,
+  onSaveAndCopy,
+  actionLabel,
+  actionDetail,
 }: {
   title: string;
   draftId: string;
@@ -51,8 +50,9 @@ function DraftEditor({
   body: string;
   internalNote?: string;
   onChange: (draftId: string, patch: { subject?: string; body?: string; internalNote?: string }) => void;
-  onSend: (draftId: string) => void;
-  sendLabel: string;
+  onSaveAndCopy: (draft: { draftId: string; body: string }) => void;
+  actionLabel: string;
+  actionDetail: string;
 }) {
   const { t } = useLocaleContext();
 
@@ -82,12 +82,13 @@ function DraftEditor({
           className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/90 px-4 py-3 text-sm leading-6 outline-none"
         />
       </DataLabel>
+      <p className="text-xs leading-5 text-[color:var(--muted-ink)]">{actionDetail}</p>
       <button
         type="button"
-        onClick={() => onSend(draftId)}
+        onClick={() => onSaveAndCopy({ draftId, body })}
         className="rounded-full bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-white"
       >
-        {sendLabel}
+        {actionLabel}
       </button>
     </div>
   );
@@ -219,17 +220,16 @@ export function WorkoutSessionScreen({
     addExercise,
     regenerateSessionWorkout,
     completeSession,
-    upsertDraft,
     updateDraft,
     sendDraftToTimeline,
   } = useCRM();
-  const { t, locale, formatDate } = useLocaleContext();
+  const { t, formatDate } = useLocaleContext();
   const [newExerciseName, setNewExerciseName] = useState("");
   const [showReworkPanel, setShowReworkPanel] = useState(false);
   const [reworkInstructions, setReworkInstructions] = useState("");
   const [isReworking, setIsReworking] = useState(false);
   const [isCompletingSession, setIsCompletingSession] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
 
   const bundle = getSessionBundle(state, sessionId);
   if (!bundle || !bundle.client || bundle.client.id !== clientId) {
@@ -253,12 +253,10 @@ export function WorkoutSessionScreen({
 
   const completion = getSessionCompletion(sessionWorkout);
   const adjustments = summarizeExerciseAdjustments(sessionWorkout.exercises);
-  const assessments = getClientAssessments(state, client.id);
   const summaryDraft = [...state.aiDrafts]
     .filter((draft) => draft.sessionId === sessionId && draft.type === "workout-summary")
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
-  const subtitleParts = [
-    client.fullName,
+  const subtitleMeta = [
     session.startAt ? formatDate(session.startAt) : t("common.noDateYet"),
     session.location || `${t("fields.location")}: ${t("common.none")}`,
   ];
@@ -290,23 +288,34 @@ export function WorkoutSessionScreen({
     }
   }
 
-  async function generateDraft() {
-    const endpoint = "/api/ai/workout-summary";
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        locale,
-        client,
-        session,
-        plannedWorkout,
-        sessionWorkout,
-        assessments,
-      }),
-    });
+  async function copyTextToClipboard(value: string) {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return;
+    }
 
-    const payload = (await response.json()) as { draft: Parameters<typeof upsertDraft>[0] };
-    startTransition(() => upsertDraft(payload.draft));
+    const tempTextArea = document.createElement("textarea");
+    tempTextArea.value = value;
+    tempTextArea.setAttribute("readonly", "true");
+    tempTextArea.style.position = "absolute";
+    tempTextArea.style.left = "-9999px";
+    document.body.appendChild(tempTextArea);
+    tempTextArea.select();
+    document.execCommand("copy");
+    document.body.removeChild(tempTextArea);
+  }
+
+  async function handleSaveAndCopyDraft({
+    draftId,
+    body,
+  }: {
+    draftId: string;
+    body: string;
+  }) {
+    sendDraftToTimeline(draftId);
+    await copyTextToClipboard(body);
+    setCopyState("copied");
+    window.setTimeout(() => setCopyState("idle"), 2200);
   }
 
   return (
@@ -314,7 +323,12 @@ export function WorkoutSessionScreen({
       <PageLead
         eyebrow={t("workout.title")}
         title={session.title}
-        subtitle={subtitleParts.join(" / ")}
+        subtitle={
+          <span>
+            <strong className="font-semibold text-[color:var(--ink)]">{client.fullName}</strong>
+            <span>{` / ${subtitleMeta.join(" / ")}`}</span>
+          </span>
+        }
       />
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -365,12 +379,6 @@ export function WorkoutSessionScreen({
                 >
                   {isCompletingSession ? t("workout.completing") : t("workout.completeSession")}
                 </button>
-                <Link
-                  href={`/clients/${client.id}`}
-                  className="rounded-full bg-[color:var(--sand-2)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
-                >
-                  {client.fullName}
-                </Link>
               </div>
             }
           >
@@ -604,33 +612,43 @@ export function WorkoutSessionScreen({
             }
           />
 
-          <SectionCard title={t("workout.aiTools")} help={t("help.aiDrafts")}>
-            <div className="grid gap-3">
-                <button
-                  type="button"
-                  onClick={() => void generateDraft()}
-                  className="rounded-[22px] bg-[color:var(--ink)] px-4 py-4 text-sm font-semibold text-white"
-                >
-                {isPending ? "..." : t("workout.recapDraft")}
-              </button>
-            </div>
-          </SectionCard>
-
           {summaryDraft ? (
-            <DraftEditor
-              title={summaryDraft.title}
-              draftId={summaryDraft.id}
-              subject={summaryDraft.subject}
-              body={summaryDraft.body}
-              internalNote={summaryDraft.internalNote}
-              onChange={(draftId, patch) => updateDraft(draftId, patch)}
-              onSend={(draftId) => sendDraftToTimeline(draftId)}
-              sendLabel={t("workout.emailLog")}
-            />
+            <SectionCard
+              title={t("workout.summaryCardTitle")}
+              subtitle={t("workout.summaryCardSubtitle")}
+              help={t("help.aiDrafts")}
+            >
+              <DraftEditor
+                title={summaryDraft.title}
+                draftId={summaryDraft.id}
+                subject={summaryDraft.subject}
+                body={summaryDraft.body}
+                internalNote={summaryDraft.internalNote}
+                onChange={(draftId, patch) =>
+                  updateDraft(draftId, patch as Partial<AIDraft>)
+                }
+                onSaveAndCopy={handleSaveAndCopyDraft}
+                actionLabel={
+                  copyState === "copied"
+                    ? t("workout.saveAndCopySuccess")
+                    : t("workout.saveAndCopy")
+                }
+                actionDetail={t("workout.saveAndCopyHint")}
+              />
+            </SectionCard>
           ) : null}
 
           {!summaryDraft ? (
-            <EmptyState title={t("common.none")} body={t("workout.emptyDraft")} />
+            <SectionCard
+              title={t("workout.summaryCardTitle")}
+              subtitle={t("workout.summaryPendingSubtitle")}
+              help={t("help.aiDrafts")}
+            >
+              <EmptyState
+                title={t("workout.summaryPendingTitle")}
+                body={t("workout.summaryPendingBody")}
+              />
+            </SectionCard>
           ) : null}
         </div>
       </div>

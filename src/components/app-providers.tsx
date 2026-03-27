@@ -2051,6 +2051,75 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function generateWorkoutSummaryForSession(
+    sessionId: string,
+    baseSnapshot?: CRMState,
+  ) {
+    const snapshot = baseSnapshot ?? stateRef.current;
+    const bundle = getSessionBundle(snapshot, sessionId);
+    if (!bundle?.client || !bundle.sessionWorkout) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/ai/workout-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          locale: bundle.client.preferredLanguage,
+          client: bundle.client,
+          session: bundle.session,
+          plannedWorkout: bundle.plannedWorkout,
+          sessionWorkout: bundle.sessionWorkout,
+          assessments: getClientAssessments(snapshot, bundle.client.id),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Workout summary generation failed.");
+      }
+
+      const payload = (await response.json()) as { draft: AIDraft };
+      applyCRMUpdate((previous) => {
+        const staleDraftIds = new Set(
+          previous.aiDrafts
+            .filter(
+              (draft) =>
+                draft.sessionId === sessionId && draft.type === "workout-summary",
+            )
+            .map((draft) => draft.id),
+        );
+
+        return {
+          ...previous,
+          aiDrafts: [
+            payload.draft,
+            ...previous.aiDrafts.filter((draft) => !staleDraftIds.has(draft.id)),
+          ],
+          activityEvents: [
+            {
+              id: `act-${crypto.randomUUID()}`,
+              actor: "AI",
+              clientId: payload.draft.clientId,
+              type: "ai.draft",
+              detail: "Generated workout-summary draft.",
+              createdAt: timestamp(),
+            },
+            ...previous.activityEvents,
+          ],
+        };
+      });
+      setCrmError(null);
+    } catch (error) {
+      console.error("Workout summary generation failed.", error);
+      setCrmError(
+        error instanceof Error
+          ? error.message
+          : "The workout summary could not be generated right now.",
+      );
+    }
+  }
+
   async function completeSessionAndGenerateNext(sessionId: string) {
     const snapshot = stateRef.current;
     const session = snapshot.sessions.find((item) => item.id === sessionId);
@@ -2062,9 +2131,12 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     const completedSnapshot = buildCompletedSessionState(snapshot, sessionId, actor);
     applyCRMUpdate((previous) => buildCompletedSessionState(previous, sessionId, actor));
 
+    const tasks: Promise<void>[] = [generateWorkoutSummaryForSession(sessionId, completedSnapshot)];
     if (session.primaryClientId) {
-      await generateNextWorkoutForClient(session.primaryClientId, completedSnapshot);
+      tasks.push(generateNextWorkoutForClient(session.primaryClientId, completedSnapshot));
     }
+
+    await Promise.allSettled(tasks);
   }
 
   const crmValue: CRMContextValue = {

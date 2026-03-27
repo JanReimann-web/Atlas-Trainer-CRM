@@ -345,6 +345,17 @@ const messages: Record<Locale, DictionaryTree> = {
       removeSet: "Remove set",
       addLiveExercisePlaceholder: "Add a new live exercise",
       aiTools: "AI tools",
+      summaryCardTitle: "Client recap",
+      summaryCardSubtitle:
+        "AI prepares this recap automatically when the session is marked complete. Edit it before saving it to the client timeline and copying it into your email body.",
+      summaryPendingTitle: "No recap yet",
+      summaryPendingSubtitle: "The recap appears here automatically after the session is completed.",
+      summaryPendingBody:
+        "Mark the session complete to let AI prepare the client-facing recap. You can then edit it, save it to the client profile, and copy the body into email.",
+      saveAndCopy: "Save and copy",
+      saveAndCopySuccess: "Saved and copied",
+      saveAndCopyHint:
+        "Saves the recap under the client profile and copies the email body text to your clipboard.",
       reworkToggleTitle: "Open AI workout rebuild",
       reworkPanelTitle: "AI workout rebuild",
       reworkPanelSubtitle:
@@ -844,6 +855,17 @@ const messages: Record<Locale, DictionaryTree> = {
       removeSet: "Eemalda seeria",
       addLiveExercisePlaceholder: "Lisa uus live-harjutus",
       aiTools: "AI tööriistad",
+      summaryCardTitle: "Kliendikokkuvõte",
+      summaryCardSubtitle:
+        "AI koostab selle kokkuvõtte automaatselt, kui sessioon märgitakse tehtuks. Muuda teksti enne, kui salvestad selle kliendiprofiili alla ja kopeerid e-kirja body jaoks.",
+      summaryPendingTitle: "Kokkuvõtet veel ei ole",
+      summaryPendingSubtitle: "Kokkuvõte tekib siia automaatselt pärast sessiooni lõpetamist.",
+      summaryPendingBody:
+        "Märgi sessioon tehtuks, et AI koostaks kliendile kokkuvõtte. Seejärel saad seda muuta, salvestada kliendiprofiili alla ja kopeerida e-kirja body sisse.",
+      saveAndCopy: "Salvesta ja kopeeri",
+      saveAndCopySuccess: "Salvestatud ja kopeeritud",
+      saveAndCopyHint:
+        "Salvestab kokkuvõtte kliendiprofiili alla ja kopeerib e-kirja body teksti sinu clipboardi.",
       reworkToggleTitle: "Ava AI treeningu ümbertegemine",
       reworkPanelTitle: "AI treeningu ümbertegemine",
       reworkPanelSubtitle:

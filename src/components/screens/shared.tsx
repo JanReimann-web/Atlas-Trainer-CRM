@@ -9,7 +9,7 @@ export function PageLead({
 }: {
   eyebrow: string;
   title: string;
-  subtitle?: string;
+  subtitle?: ReactNode;
 }) {
   return (
     <div className="space-y-2">
