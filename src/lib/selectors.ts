@@ -1,5 +1,21 @@
 import { CRMState, SessionExercise, SessionWorkout } from "@/lib/types";
 
+function compareSessionStart(left: CRMState["sessions"][number], right: CRMState["sessions"][number]) {
+  if (!left.startAt && !right.startAt) {
+    return 0;
+  }
+
+  if (!left.startAt) {
+    return 1;
+  }
+
+  if (!right.startAt) {
+    return -1;
+  }
+
+  return left.startAt.localeCompare(right.startAt);
+}
+
 export function getClient(state: CRMState, clientId: string) {
   return state.clients.find((client) => client.id === clientId);
 }
@@ -47,13 +63,25 @@ export function getConvertedClientsWithFirstSessionBookedCount(state: CRMState) 
 export function getClientSessions(state: CRMState, clientId: string) {
   return state.sessions
     .filter((session) => session.clientIds.includes(clientId))
-    .sort((a, b) => a.startAt.localeCompare(b.startAt));
+    .sort(compareSessionStart);
 }
 
 export function getClientUpcomingSession(state: CRMState, clientId: string) {
-  return getClientSessions(state, clientId).find(
-    (session) => session.status === "planned" || session.status === "in-progress",
+  const schedulableStatuses = new Set(["planned", "in-progress"]);
+  const sessions = state.sessions.filter(
+    (session) =>
+      session.clientIds.includes(clientId) && schedulableStatuses.has(session.status),
   );
+
+  const scheduledSession = [...sessions]
+    .filter((session) => Boolean(session.startAt))
+    .sort(compareSessionStart)[0];
+
+  if (scheduledSession) {
+    return scheduledSession;
+  }
+
+  return sessions.find((session) => !session.startAt);
 }
 
 export function getClientPurchases(state: CRMState, clientId: string) {
@@ -115,13 +143,19 @@ export function getSessionBundle(state: CRMState, sessionId: string) {
 
 export function getUpcomingSessions(state: CRMState, limit = 6) {
   return [...state.sessions]
-    .filter((session) => session.status === "planned" || session.status === "in-progress")
-    .sort((a, b) => a.startAt.localeCompare(b.startAt))
+    .filter(
+      (session) =>
+        (session.status === "planned" || session.status === "in-progress") &&
+        Boolean(session.startAt),
+    )
+    .sort(compareSessionStart)
     .slice(0, limit);
 }
 
 export function getSessionsToday(state: CRMState, datePrefix = "2026-03-24") {
-  return state.sessions.filter((session) => session.startAt.startsWith(datePrefix));
+  return state.sessions.filter(
+    (session) => Boolean(session.startAt) && session.startAt.startsWith(datePrefix),
+  );
 }
 
 export function getMonthlyRevenue(state: CRMState, monthPrefix = "2026-03") {

@@ -344,6 +344,10 @@ const messages: Record<Locale, DictionaryTree> = {
       removeSet: "Remove set",
       addLiveExercisePlaceholder: "Add a new live exercise",
       aiTools: "AI tools",
+      scheduleSession: "Schedule this session",
+      scheduleDetails: "Schedule details",
+      schedulePendingHint:
+        "This AI-created workout exists on the client profile already, but date and location still need to be added by the coach.",
     },
     sessionKind: {
       solo: "Solo",
@@ -824,6 +828,10 @@ const messages: Record<Locale, DictionaryTree> = {
       removeSet: "Eemalda seeria",
       addLiveExercisePlaceholder: "Lisa uus live-harjutus",
       aiTools: "AI tööriistad",
+      scheduleSession: "Ajasta see sessioon",
+      scheduleDetails: "Sessiooni ajastus",
+      schedulePendingHint:
+        "See AI-ga loodud treening on juba kliendiprofiilis olemas, aga treener peab kuupäeva, kellaaja ja asukoha veel lisama.",
     },
     sessionKind: {
       solo: "Individuaal",

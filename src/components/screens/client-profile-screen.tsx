@@ -341,6 +341,21 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     (plan) => plan.status === "active",
   );
   const nextSession = getClientUpcomingSession(state, clientId);
+  const recentSessions = [...sessions].sort((left, right) => {
+    if (!left.startAt && !right.startAt) {
+      return 0;
+    }
+
+    if (!left.startAt) {
+      return -1;
+    }
+
+    if (!right.startAt) {
+      return 1;
+    }
+
+    return right.startAt.localeCompare(left.startAt);
+  });
   const drafts = getClientDrafts(state, clientId).slice(0, 3);
   const messages = getClientMessages(state, clientId).slice(0, 4);
   const reminders = state.reminders
@@ -1325,9 +1340,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                 {sessions.length === 0 ? (
                   <EmptyState title={t("common.none")} body={t("clientProfile.noWorkoutHistory")} />
                 ) : (
-                  sessions
-                    .slice()
-                    .reverse()
+                  recentSessions
                     .slice(0, 6)
                     .map((session) => (
                       <Link

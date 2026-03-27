@@ -107,6 +107,13 @@ type CRMContextValue = {
   addBodyAssessment: (input: CreateBodyAssessmentInput) => void;
   addWorkoutPlan: (input: CreateWorkoutPlanInput) => void;
   addWorkoutSession: (input: CreateWorkoutSessionInput) => void;
+  updateSessionSchedule: (args: {
+    sessionId: string;
+    sessionDate: string;
+    startTime: string;
+    durationMinutes: number;
+    location: string;
+  }) => void;
   convertLeadToClient: (leadId: string) => void;
   updateLeadStatus: (leadId: string, status: CreateLeadInput["status"]) => void;
   markReminderDone: (reminderId: string) => void;
@@ -262,21 +269,237 @@ function subtractHours(value: string, hours: number) {
   return date.toISOString();
 }
 
-function buildInitialSessionWindow(anchorAt: string) {
-  const start = new Date(anchorAt);
-  if (Number.isNaN(start.getTime())) {
-    start.setTime(Date.now());
-  }
+function combineDateTime(date: string, time: string) {
+  return `${date}T${time}:00.000Z`;
+}
 
-  start.setUTCDate(start.getUTCDate() + 2);
-  start.setUTCHours(9, 0, 0, 0);
+function addMinutesToIso(value: string, minutes: number) {
+  const date = new Date(value);
+  date.setUTCMinutes(date.getUTCMinutes() + minutes);
+  return date.toISOString();
+}
 
-  const end = new Date(start);
-  end.setUTCHours(end.getUTCHours() + 1);
+type StarterWorkoutDraft = {
+  planTitle: string;
+  planGoal: string;
+  focusAreas: string[];
+  sessionPattern: string[];
+  sessionTitle: string;
+  sessionObjective: string;
+  sessionKind: CreateWorkoutSessionInput["kind"];
+  coachNote: string;
+  sessionNote: string;
+  exercises: CreateWorkoutSessionInput["exercises"];
+};
+
+function buildStarterSet(label: string, reps: string, rpe?: number, tempo?: string) {
+  return {
+    label,
+    reps,
+    rpe,
+    tempo,
+  };
+}
+
+function buildLocalStarterWorkout(client: ClientProfile): StarterWorkoutDraft {
+  const locale = client.preferredLanguage;
+  const profileText = [
+    client.gender,
+    ...client.tags,
+    ...client.goals,
+    client.notes,
+    ...client.healthFlags.map((flag) => `${flag.title} ${flag.detail}`),
+  ]
+    .join(" ")
+    .toLowerCase();
+  const wantsLowerBody = /lower-body|lower body|glute|leg|waist|fat loss/i.test(profileText);
+  const wantsPosture = /posture|desk|thoracic|neck|shoulder/i.test(profileText);
+  const wantsCore = /core|postpartum|stability/i.test(profileText);
+  const isBeginner = /beginner|confidence|machine|first gym/i.test(profileText);
+  const sessionKind = /\bduo\b|friend|partner/i.test(profileText)
+    ? "duo"
+    : /group|small group|micro-group/i.test(profileText)
+      ? "group"
+      : "solo";
+  const primaryGoal =
+    client.goals[0]?.trim() ||
+    (locale === "et" ? "järjepidev treeningurutiin" : "a consistent training routine");
+
+  const baseExercises: CreateWorkoutSessionInput["exercises"] = wantsLowerBody
+    ? [
+        {
+          name: locale === "et" ? "Dead bug" : "Dead bug",
+          focus: locale === "et" ? "Kere kontroll" : "Core control",
+          sets: [buildStarterSet("1", "6/6", 5, "slow"), buildStarterSet("2", "6/6", 5, "slow")],
+        },
+        {
+          name: locale === "et" ? "Karikakükk" : "Goblet squat",
+          focus: locale === "et" ? "Alakeha baasjõud" : "Lower-body strength base",
+          sets: [buildStarterSet("1", "8", 6, "3111"), buildStarterSet("2", "8", 6, "3111"), buildStarterSet("3", "8", 7, "3111")],
+        },
+        {
+          name:
+            locale === "et"
+              ? "Rumeenia jõutõmme hantlitega"
+              : "Dumbbell Romanian deadlift",
+          focus: locale === "et" ? "Tagakett" : "Posterior chain",
+          sets: [buildStarterSet("1", "8", 6), buildStarterSet("2", "8", 6), buildStarterSet("3", "8", 7)],
+        },
+        {
+          name: locale === "et" ? "Istudes sõudmine" : "Seated row",
+          focus: locale === "et" ? "Ülaselg" : "Upper-back support",
+          sets: [buildStarterSet("1", "10", 6), buildStarterSet("2", "10", 6), buildStarterSet("3", "10", 7)],
+        },
+        {
+          name: locale === "et" ? "Pallof press" : "Pallof press",
+          focus: locale === "et" ? "Pöördevastane kere töö" : "Anti-rotation core work",
+          sets: [buildStarterSet("1", "10/10", 6), buildStarterSet("2", "10/10", 6)],
+        },
+      ]
+    : wantsPosture
+      ? [
+          {
+            name: "Dead bug",
+            focus: locale === "et" ? "Kere pinge" : "Core tension",
+            sets: [buildStarterSet("1", "6/6", 5, "slow"), buildStarterSet("2", "6/6", 5, "slow")],
+          },
+          {
+            name: locale === "et" ? "Karikakükk" : "Goblet squat",
+            focus: locale === "et" ? "Täiskeha baas" : "Full-body foundation",
+            sets: [buildStarterSet("1", "8", 6, "3011"), buildStarterSet("2", "8", 6, "3011"), buildStarterSet("3", "8", 7, "3011")],
+          },
+          {
+            name:
+              locale === "et"
+                ? "Kaldpingil hantlitega surumine"
+                : "Incline dumbbell press",
+            focus: locale === "et" ? "Õlasõbralik surumine" : "Shoulder-friendly press",
+            sets: [buildStarterSet("1", "8", 6), buildStarterSet("2", "8", 6), buildStarterSet("3", "8", 7)],
+          },
+          {
+            name:
+              locale === "et"
+                ? "Rinnatoega sõudmine"
+                : "Chest-supported row",
+            focus: locale === "et" ? "Rüht ja ülaselg" : "Posture and upper-back strength",
+            sets: [buildStarterSet("1", "10", 6), buildStarterSet("2", "10", 6), buildStarterSet("3", "10", 7)],
+          },
+          {
+            name: locale === "et" ? "Farmeri kand" : "Farmer carry",
+            focus: locale === "et" ? "Tervikkeha pinge" : "Whole-body tension",
+            sets: [buildStarterSet("1", "25 m", 6), buildStarterSet("2", "25 m", 7)],
+          },
+        ]
+      : wantsCore
+        ? [
+            {
+              name:
+                locale === "et"
+                  ? "Hingamine + dead bug"
+                  : "Breathing dead bug",
+              focus: locale === "et" ? "Kere kontroll ja hingamine" : "Breathing and core control",
+              sets: [buildStarterSet("1", "6/6", 5, "slow"), buildStarterSet("2", "6/6", 5, "slow")],
+            },
+            {
+              name:
+                locale === "et"
+                  ? "Karikakükk kastile"
+                  : "Goblet squat to box",
+              focus: locale === "et" ? "Turvaline küki muster" : "Safe squat pattern",
+              sets: [buildStarterSet("1", "8", 6, "3111"), buildStarterSet("2", "8", 6, "3111"), buildStarterSet("3", "8", 7, "3111")],
+            },
+            {
+              name: locale === "et" ? "Istudes sõudmine" : "Seated row",
+              focus: locale === "et" ? "Ülaselja kontroll" : "Upper-back control",
+              sets: [buildStarterSet("1", "10", 6), buildStarterSet("2", "10", 6), buildStarterSet("3", "10", 7)],
+            },
+            {
+              name:
+                locale === "et"
+                  ? "Rumeenia jõutõmme hantlitega"
+                  : "Dumbbell Romanian deadlift",
+              focus: locale === "et" ? "Puusahinge baas" : "Hip-hinge foundation",
+              sets: [buildStarterSet("1", "8", 6), buildStarterSet("2", "8", 6), buildStarterSet("3", "8", 7)],
+            },
+            {
+              name: locale === "et" ? "Kohverkand" : "Suitcase carry",
+              focus: locale === "et" ? "Kere stabiilsus" : "Core stability",
+              sets: [buildStarterSet("1", "20 m / side", 6), buildStarterSet("2", "20 m / side", 6)],
+            },
+          ]
+        : [
+            {
+              name: "Dead bug",
+              focus: locale === "et" ? "Kere kontroll" : "Core control",
+              sets: [buildStarterSet("1", "6/6", 5, "slow"), buildStarterSet("2", "6/6", 5, "slow")],
+            },
+            {
+              name: isBeginner
+                ? locale === "et"
+                  ? "Jalapress"
+                  : "Leg press"
+                : locale === "et"
+                  ? "Karikakükk"
+                  : "Goblet squat",
+              focus: locale === "et" ? "Alakeha baas" : "Lower-body foundation",
+              sets: [buildStarterSet("1", "10", 6), buildStarterSet("2", "10", 6), buildStarterSet("3", "10", 7)],
+            },
+            {
+              name:
+                locale === "et"
+                  ? "Rumeenia jõutõmme hantlitega"
+                  : "Dumbbell Romanian deadlift",
+              focus: locale === "et" ? "Puusahing" : "Hip hinge pattern",
+              sets: [buildStarterSet("1", "8", 6), buildStarterSet("2", "8", 6), buildStarterSet("3", "8", 7)],
+            },
+            {
+              name: locale === "et" ? "Istudes sõudmine" : "Seated row",
+              focus: locale === "et" ? "Ülaselg" : "Upper-back support",
+              sets: [buildStarterSet("1", "10", 6), buildStarterSet("2", "10", 6), buildStarterSet("3", "10", 7)],
+            },
+            {
+              name:
+                locale === "et"
+                  ? "Kaldpingil hantlitega surumine"
+                  : "Incline dumbbell press",
+              focus: locale === "et" ? "Turvaline ülakeha töö" : "Simple press pattern",
+              sets: [buildStarterSet("1", "8", 6), buildStarterSet("2", "8", 6), buildStarterSet("3", "8", 7)],
+            },
+          ];
 
   return {
-    startAt: start.toISOString(),
-    endAt: end.toISOString(),
+    planTitle:
+      locale === "et" ? `Alustusplokk: ${primaryGoal}` : `Starter block: ${primaryGoal}`,
+    planGoal:
+      locale === "et"
+        ? `Loo turvaline esimene treeningupõhi eesmärgiga ${primaryGoal.toLowerCase()}.`
+        : `Build a safe first-session baseline around ${primaryGoal.toLowerCase()}.`,
+    focusAreas:
+      locale === "et"
+        ? ["Liigutuste tehnika", "Mõõdukas koormus", "Treeningtaluvuse jälgimine"]
+        : ["Technique quality", "Moderate loading", "Readiness tracking"],
+    sessionPattern:
+      locale === "et"
+        ? ["Täiskeha baas", "5 põhiharjutust", "Koormus tunnetuse järgi"]
+        : ["Full-body foundation", "5 core exercises", "Load guided by feel"],
+    sessionTitle:
+      locale === "et"
+        ? "1. treening: tehnika ja baastaseme hindamine"
+        : "Session 1: technique and baseline assessment",
+    sessionObjective:
+      locale === "et"
+        ? "Õpeta 5 põhiharjutust ja salvesta kliendi esimene töökindel algtase."
+        : "Teach 5 core exercises and capture the client's first reliable baseline.",
+    sessionKind,
+    coachNote:
+      locale === "et"
+        ? "Hoia esimene treening mõõdukas ja kasuta seda baasliigutuste kvaliteedi ning koormustaluvuse hindamiseks."
+        : "Keep the first session moderate and use it to assess movement quality and load tolerance.",
+    sessionNote:
+      locale === "et"
+        ? "Esimene AI treening on loodud. Lisa aeg ja toimumiskoht enne kalendrisse kinnitamist."
+        : "The first AI workout has been created. Add time and location before locking it into the calendar.",
+    exercises: baseExercises.slice(0, 5),
   };
 }
 
@@ -399,15 +622,17 @@ function createWorkoutSessionState(
     sourcePlanId?: string;
     activityType?: string;
     activityDetail?: string;
+    skipScheduleValidation?: boolean;
   },
 ): CRMState {
   const exercises = normalizeWorkoutExercises(input.exercises);
-  const normalizedLocation =
-    normalizeCatalogName(input.location) ||
-    previous.trainingLocations[0]?.name ||
-    "Atlas Studio";
+  const normalizedLocation = normalizeCatalogName(input.location);
 
-  if (!input.title.trim() || !input.startAt || !input.endAt || exercises.length === 0) {
+  if (
+    !input.title.trim() ||
+    (!options?.skipScheduleValidation && (!input.startAt || !input.endAt || !normalizedLocation)) ||
+    exercises.length === 0
+  ) {
     return previous;
   }
 
@@ -473,19 +698,25 @@ function createWorkoutSessionState(
     athleteFacingNote: "",
     updatedAt: now,
   };
-  const reminderAt = input.status === "planned" ? subtractHours(input.startAt, 24) : undefined;
-  const hasLocation = previous.trainingLocations.some(
-    (location) => location.name.toLowerCase() === normalizedLocation.toLowerCase(),
-  );
-  const trainingLocations = hasLocation
-    ? previous.trainingLocations
-    : sortTrainingLocations([
-        ...previous.trainingLocations,
-        {
-          id: `location-${crypto.randomUUID()}`,
-          name: normalizedLocation,
-        },
-      ]);
+  const reminderAt =
+    input.status === "planned" && input.startAt
+      ? subtractHours(input.startAt, 24)
+      : undefined;
+  const hasLocation =
+    normalizedLocation.length > 0 &&
+    previous.trainingLocations.some(
+      (location) => location.name.toLowerCase() === normalizedLocation.toLowerCase(),
+    );
+  const trainingLocations =
+    normalizedLocation.length === 0 || hasLocation
+      ? previous.trainingLocations
+      : sortTrainingLocations([
+          ...previous.trainingLocations,
+          {
+            id: `location-${crypto.randomUUID()}`,
+            name: normalizedLocation,
+          },
+        ]);
   const nextSession = {
     id: sessionId,
     title: input.title.trim(),
@@ -813,14 +1044,7 @@ function removeLeadFromState(previous: CRMState, leadId: string): CRMState {
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const firebaseConfigured = isFirebaseConfigured();
-  const [locale, setLocaleState] = useState<Locale>(() => {
-    if (typeof window === "undefined") {
-      return "en";
-    }
-
-    const storedLocale = localStorage.getItem(LOCALE_STORAGE_KEY);
-    return storedLocale === "et" || storedLocale === "en" ? storedLocale : "en";
-  });
+  const [locale, setLocaleState] = useState<Locale>("en");
   const [authUser, setAuthUser] = useState<FirebaseAuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(firebaseConfigured);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -830,6 +1054,18 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   const [crmError, setCrmError] = useState<string | null>(null);
   const saveQueueRef = useRef(Promise.resolve());
   const stateRef = useRef(state);
+
+  useEffect(() => {
+    const storedLocale = localStorage.getItem(LOCALE_STORAGE_KEY);
+    if (storedLocale === "et" || storedLocale === "en") {
+      setLocaleState(storedLocale);
+      document.documentElement.lang = storedLocale;
+      return;
+    }
+
+    localStorage.setItem(LOCALE_STORAGE_KEY, "en");
+    document.documentElement.lang = "en";
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(LOCALE_STORAGE_KEY, locale);
@@ -951,14 +1187,24 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       locale,
       setLocale: (nextLocale) => startTransition(() => setLocaleState(nextLocale)),
       t: (key) => translate(locale, key),
-      formatDate: (value, options) =>
-        new Intl.DateTimeFormat(locale === "et" ? "et-EE" : "en-GB", {
+      formatDate: (value, options) => {
+        if (!value) {
+          return translate(locale, "common.noDateYet");
+        }
+
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) {
+          return translate(locale, "common.noDateYet");
+        }
+
+        return new Intl.DateTimeFormat(locale === "et" ? "et-EE" : "en-GB", {
           day: "2-digit",
           month: "short",
           hour: "2-digit",
           minute: "2-digit",
           ...options,
-        }).format(new Date(value)),
+        }).format(parsed);
+      },
       formatCurrency: (value) =>
         new Intl.NumberFormat(locale === "et" ? "et-EE" : "en-GB", {
           style: "currency",
@@ -1198,39 +1444,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    try {
-      const response = await fetch("/api/ai/first-workout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          locale: client.preferredLanguage,
-          client,
-          recentAssessments: getClientAssessments(snapshot, clientId),
-          recentSessions: getClientSessions(snapshot, clientId),
-          trainingLocations: snapshot.trainingLocations,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Initial workout generation failed.");
-      }
-
-      const payload = (await response.json()) as {
-        workout: {
-          planTitle: string;
-          planGoal: string;
-          focusAreas: string[];
-          sessionPattern: string[];
-          sessionTitle: string;
-          sessionObjective: string;
-          sessionKind: CreateWorkoutSessionInput["kind"];
-          location: string;
-          coachNote: string;
-          sessionNote: string;
-          exercises: CreateWorkoutSessionInput["exercises"];
-        };
-      };
-
+    const persistInitialWorkout = (workout: StarterWorkoutDraft) => {
       applyCRMUpdate((previous) => {
         const currentClient = previous.clients.find((item) => item.id === clientId);
         if (!currentClient) {
@@ -1256,17 +1470,16 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         const nextPlan = {
           id: nextPlanId,
           clientId,
-          title: payload.workout.planTitle.trim(),
+          title: workout.planTitle.trim(),
           status: "active" as const,
-          goal: payload.workout.planGoal.trim(),
-          focusAreas: payload.workout.focusAreas.filter(Boolean),
-          sessionPattern: payload.workout.sessionPattern.filter(Boolean),
+          goal: workout.planGoal.trim(),
+          focusAreas: workout.focusAreas.filter(Boolean),
+          sessionPattern: workout.sessionPattern.filter(Boolean),
           activeFrom: currentClient.joinedAt,
           createdAt: now,
           updatedAt: now,
           origin: "ai" as const,
         };
-        const sessionWindow = buildInitialSessionWindow(currentClient.joinedAt);
 
         const withPlan = {
           ...previous,
@@ -1299,30 +1512,64 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           withPlan,
           {
             clientId,
-            title: payload.workout.sessionTitle,
-            objective: payload.workout.sessionObjective,
-            startAt: sessionWindow.startAt,
-            endAt: sessionWindow.endAt,
-            kind: payload.workout.sessionKind,
+            title: workout.sessionTitle,
+            objective: workout.sessionObjective,
+            startAt: "",
+            endAt: "",
+            kind: workout.sessionKind,
             status: "planned",
-            location: payload.workout.location,
-            coachNote: payload.workout.coachNote,
-            sessionNote: payload.workout.sessionNote,
-            exercises: payload.workout.exercises,
+            location: "",
+            coachNote: workout.coachNote,
+            sessionNote: workout.sessionNote,
+            exercises: workout.exercises,
           },
           "AI",
           {
             sourcePlanId: nextPlanId,
             activityType: "session.planned",
             activityDetail: `AI generated the first workout for ${currentClient.fullName}.`,
+            skipScheduleValidation: true,
           },
         );
       });
+    };
+
+    try {
+      const response = await fetch("/api/ai/first-workout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          locale: client.preferredLanguage,
+          client,
+          recentAssessments: getClientAssessments(snapshot, clientId),
+          recentSessions: getClientSessions(snapshot, clientId),
+          trainingLocations: snapshot.trainingLocations,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Initial workout generation failed.");
+      }
+
+      const payload = (await response.json()) as {
+        workout: {
+          planTitle: string;
+          planGoal: string;
+          focusAreas: string[];
+          sessionPattern: string[];
+          sessionTitle: string;
+          sessionObjective: string;
+          sessionKind: CreateWorkoutSessionInput["kind"];
+          coachNote: string;
+          sessionNote: string;
+          exercises: CreateWorkoutSessionInput["exercises"];
+        };
+      };
+
+      persistInitialWorkout(payload.workout);
     } catch (error) {
       console.error("Initial workout generation failed.", error);
-      setCrmError(
-        error instanceof Error ? error.message : "Initial workout generation failed.",
-      );
+      persistInitialWorkout(buildLocalStarterWorkout(client));
     }
   }
 
@@ -2157,6 +2404,88 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           previous.users[0]?.name ?? authUser?.email ?? "Coach",
         ),
       ),
+    updateSessionSchedule: ({
+      sessionId,
+      sessionDate,
+      startTime,
+      durationMinutes,
+      location,
+    }) =>
+      applyCRMUpdate((previous) => {
+        const session = previous.sessions.find((item) => item.id === sessionId);
+        if (!session || !sessionDate || !startTime || !location.trim()) {
+          return previous;
+        }
+
+        const startAt = combineDateTime(sessionDate, startTime);
+        const endAt = addMinutesToIso(startAt, durationMinutes);
+        const normalizedLocation = normalizeCatalogName(location);
+        const reminderAt =
+          session.status === "planned" ? subtractHours(startAt, 24) : session.reminderAt;
+        const hasLocation = previous.trainingLocations.some(
+          (item) => item.name.toLowerCase() === normalizedLocation.toLowerCase(),
+        );
+        const trainingLocations = hasLocation
+          ? previous.trainingLocations
+          : sortTrainingLocations([
+              ...previous.trainingLocations,
+              { id: `location-${crypto.randomUUID()}`, name: normalizedLocation },
+            ]);
+        const reminderExists = previous.reminders.some(
+          (reminder) => reminder.sessionId === sessionId,
+        );
+        const now = timestamp();
+
+        return {
+          ...previous,
+          trainingLocations,
+          sessions: previous.sessions.map((item) =>
+            item.id === sessionId
+              ? {
+                  ...item,
+                  startAt,
+                  endAt,
+                  location: normalizedLocation,
+                  reminderAt,
+                }
+              : item,
+          ),
+          reminders:
+            session.status === "planned"
+              ? reminderExists
+                ? previous.reminders.map((reminder) =>
+                    reminder.sessionId === sessionId && reminderAt
+                      ? { ...reminder, dueAt: reminderAt, status: "scheduled" as const }
+                      : reminder,
+                  )
+                : reminderAt
+                  ? [
+                      {
+                        id: `rem-${crypto.randomUUID()}`,
+                        clientId: session.primaryClientId,
+                        sessionId,
+                        title: "24h reminder",
+                        dueAt: reminderAt,
+                        channel: "calendar",
+                        status: "scheduled" as const,
+                      },
+                      ...previous.reminders,
+                    ]
+                  : previous.reminders
+              : previous.reminders,
+          activityEvents: [
+            {
+              id: `act-${crypto.randomUUID()}`,
+              actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
+              clientId: session.primaryClientId,
+              type: "session.planned",
+              detail: `Updated schedule details for ${session.title}.`,
+              createdAt: now,
+            },
+            ...previous.activityEvents,
+          ],
+        };
+      }),
     convertLeadToClient: (leadId) => {
       let createdClient: ClientProfile | null = null;
 

@@ -16,9 +16,53 @@ import {
   getSessionCompletion,
   summarizeExerciseAdjustments,
 } from "@/lib/selectors";
+import { Session, TrainingLocation } from "@/lib/types";
 import { PageLead } from "@/components/screens/shared";
 
 type DraftKind = "workout-summary" | "next-session";
+
+function dateInputFromIso(value?: string) {
+  if (!value) {
+    return "";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toISOString().slice(0, 10);
+}
+
+function timeInputFromIso(value?: string) {
+  if (!value) {
+    return "09:00";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "09:00";
+  }
+
+  return `${String(parsed.getUTCHours()).padStart(2, "0")}:${String(
+    parsed.getUTCMinutes(),
+  ).padStart(2, "0")}`;
+}
+
+function durationInputFromSession(startAt?: string, endAt?: string) {
+  if (!startAt || !endAt) {
+    return "60";
+  }
+
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return "60";
+  }
+
+  const diff = Math.max(15, Math.round((end.getTime() - start.getTime()) / 60000));
+  return String(diff);
+}
 
 function DraftEditor({
   title,
@@ -78,6 +122,109 @@ function DraftEditor({
   );
 }
 
+function SessionScheduleCard({
+  session,
+  trainingLocations,
+  onSave,
+}: {
+  session: Session;
+  trainingLocations: TrainingLocation[];
+  onSave: (args: {
+    sessionDate: string;
+    startTime: string;
+    durationMinutes: number;
+    location: string;
+  }) => void;
+}) {
+  const { t, formatDate } = useLocaleContext();
+  const [sessionDate, setSessionDate] = useState(() => dateInputFromIso(session.startAt));
+  const [startTime, setStartTime] = useState(() => timeInputFromIso(session.startAt));
+  const [durationMinutes, setDurationMinutes] = useState(() =>
+    durationInputFromSession(session.startAt, session.endAt),
+  );
+  const [location, setLocation] = useState(() => session.location || "");
+  const schedulePending = !session.startAt || !session.location;
+
+  return (
+    <SectionCard
+      title={schedulePending ? t("workout.scheduleSession") : t("workout.scheduleDetails")}
+      subtitle={
+        schedulePending
+          ? t("workout.schedulePendingHint")
+          : `${formatDate(session.startAt)} / ${session.location}`
+      }
+    >
+      <div className="grid gap-4 md:grid-cols-2">
+        <DataLabel label={t("fields.sessionDate")}>
+          <input
+            type="date"
+            value={sessionDate}
+            onChange={(event) => setSessionDate(event.target.value)}
+            className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/90 px-4 py-3 text-sm outline-none"
+          />
+        </DataLabel>
+        <DataLabel label={t("fields.startTime")}>
+          <input
+            type="time"
+            value={startTime}
+            onChange={(event) => setStartTime(event.target.value)}
+            className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/90 px-4 py-3 text-sm outline-none"
+          />
+        </DataLabel>
+        <DataLabel label={t("fields.durationMinutes")}>
+          <input
+            type="number"
+            min="15"
+            step="15"
+            value={durationMinutes}
+            onChange={(event) => setDurationMinutes(event.target.value)}
+            className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/90 px-4 py-3 text-sm outline-none"
+          />
+        </DataLabel>
+        <DataLabel label={t("fields.location")}>
+          <input
+            list={`session-location-${session.id}`}
+            value={location}
+            onChange={(event) => setLocation(event.target.value)}
+            className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/90 px-4 py-3 text-sm outline-none"
+          />
+          <datalist id={`session-location-${session.id}`}>
+            {trainingLocations.map((trainingLocation) => (
+              <option key={trainingLocation.id} value={trainingLocation.name} />
+            ))}
+          </datalist>
+        </DataLabel>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          const parsedDuration = Number(durationMinutes);
+          if (
+            !sessionDate ||
+            !startTime ||
+            !location.trim() ||
+            !Number.isFinite(parsedDuration) ||
+            parsedDuration <= 0
+          ) {
+            return;
+          }
+
+          onSave({
+            sessionDate,
+            startTime,
+            durationMinutes: parsedDuration,
+            location,
+          });
+        }}
+        className="mt-4 rounded-full bg-[color:var(--clay)] px-4 py-2 text-sm font-semibold text-white"
+      >
+        {t("common.save")}
+      </button>
+    </SectionCard>
+  );
+}
+
 export function WorkoutSessionScreen({
   clientId,
   sessionId,
@@ -88,6 +235,7 @@ export function WorkoutSessionScreen({
   const {
     state,
     updateSessionNote,
+    updateSessionSchedule,
     updateExerciseNote,
     updateSet,
     toggleExerciseState,
@@ -130,6 +278,11 @@ export function WorkoutSessionScreen({
   const nextDraft = [...state.aiDrafts]
     .filter((draft) => draft.sessionId === sessionId && draft.type === "next-session")
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  const subtitleParts = [
+    client.fullName,
+    session.startAt ? formatDate(session.startAt) : t("common.noDateYet"),
+    session.location || `${t("fields.location")}: ${t("common.none")}`,
+  ];
 
   async function generateDraft(kind: DraftKind) {
     const endpoint =
@@ -156,7 +309,7 @@ export function WorkoutSessionScreen({
       <PageLead
         eyebrow={t("workout.title")}
         title={session.title}
-        subtitle={`${client.fullName} / ${formatDate(session.startAt)} / ${session.location}`}
+        subtitle={subtitleParts.join(" / ")}
       />
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -379,6 +532,18 @@ export function WorkoutSessionScreen({
         </div>
 
         <div className="space-y-6">
+          <SessionScheduleCard
+            key={`${session.id}-${session.startAt}-${session.endAt}-${session.location}`}
+            session={session}
+            trainingLocations={state.trainingLocations}
+            onSave={(schedule) =>
+              updateSessionSchedule({
+                sessionId: session.id,
+                ...schedule,
+              })
+            }
+          />
+
           <SectionCard title={t("workout.aiTools")} help={t("help.aiDrafts")}>
             <div className="grid gap-3">
               <button
