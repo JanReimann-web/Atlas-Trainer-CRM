@@ -1,3 +1,4 @@
+import { getCurrentMonthKey, getLocalDateKey, getLocalMonthKey, getTodayDateKey } from "@/lib/date";
 import { CRMState, SessionExercise, SessionWorkout } from "@/lib/types";
 
 function compareSessionStart(left: CRMState["sessions"][number], right: CRMState["sessions"][number]) {
@@ -152,25 +153,28 @@ export function getUpcomingSessions(state: CRMState, limit = 6) {
     .slice(0, limit);
 }
 
-export function getSessionsToday(state: CRMState, datePrefix = "2026-03-24") {
+export function getSessionsToday(state: CRMState, dateKey = getTodayDateKey()) {
   return state.sessions.filter(
-    (session) => Boolean(session.startAt) && session.startAt.startsWith(datePrefix),
+    (session) => Boolean(session.startAt) && getLocalDateKey(session.startAt) === dateKey,
   );
 }
 
-export function getMonthlyRevenue(state: CRMState, monthPrefix = "2026-03") {
+export function getMonthlyRevenue(state: CRMState, monthKey = getCurrentMonthKey()) {
   return state.paymentRecords
-    .filter((payment) => payment.paidAt.startsWith(monthPrefix))
+    .filter((payment) => getLocalMonthKey(payment.paidAt) === monthKey)
     .reduce((sum, payment) => sum + payment.amount, 0);
 }
 
 export function getMonthlyRevenueByMethod(
   state: CRMState,
   method: CRMState["paymentRecords"][number]["method"],
-  monthPrefix = "2026-03",
+  monthKey = getCurrentMonthKey(),
 ) {
   return state.paymentRecords
-    .filter((payment) => payment.paidAt.startsWith(monthPrefix) && payment.method === method)
+    .filter(
+      (payment) =>
+        getLocalMonthKey(payment.paidAt) === monthKey && payment.method === method,
+    )
     .reduce((sum, payment) => sum + payment.amount, 0);
 }
 

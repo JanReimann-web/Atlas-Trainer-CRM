@@ -25,6 +25,7 @@ import {
   StorageReference,
 } from "firebase/storage";
 import { isAllowedEmail, normalizeEmail } from "@/lib/auth/allowed-emails";
+import { addMinutesToIso, buildIsoFromDateTime } from "@/lib/date";
 import { getFirebaseServices, isFirebaseConfigured } from "@/lib/firebase/client";
 import { saveCRMState, subscribeToCRMState } from "@/lib/firebase/crm-store";
 import { initialCRMState } from "@/lib/mock-data";
@@ -266,16 +267,6 @@ function addDays(value: string, days: number) {
 function subtractHours(value: string, hours: number) {
   const date = new Date(value);
   date.setUTCHours(date.getUTCHours() - hours);
-  return date.toISOString();
-}
-
-function combineDateTime(date: string, time: string) {
-  return `${date}T${time}:00.000Z`;
-}
-
-function addMinutesToIso(value: string, minutes: number) {
-  const date = new Date(value);
-  date.setUTCMinutes(date.getUTCMinutes() + minutes);
   return date.toISOString();
 }
 
@@ -2526,7 +2517,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           return previous;
         }
 
-        const startAt = combineDateTime(sessionDate, startTime);
+        const startAt = buildIsoFromDateTime(sessionDate, startTime);
         const endAt = addMinutesToIso(startAt, durationMinutes);
         const normalizedLocation = normalizeCatalogName(location);
         const reminderAt =

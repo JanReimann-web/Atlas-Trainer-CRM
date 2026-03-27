@@ -2,6 +2,7 @@
 
 import { useCRM, useLocaleContext } from "@/components/app-providers";
 import { SectionCard, StatCard } from "@/components/crm-ui";
+import { getNextMonthKey, getLocalMonthKey } from "@/lib/date";
 import {
   getClient,
   getMonthlyRevenue,
@@ -15,7 +16,10 @@ import { PageLead, TimelineItem } from "@/components/screens/shared";
 export function FinanceScreen() {
   const { state } = useCRM();
   const { t, formatCurrency, formatDate } = useLocaleContext();
-  const expiring = state.packagePurchases.filter((purchase) => purchase.expiresAt.startsWith("2026-04"));
+  const nextMonthKey = getNextMonthKey();
+  const expiring = state.packagePurchases.filter(
+    (purchase) => getLocalMonthKey(purchase.expiresAt) === nextMonthKey,
+  );
   const cardRevenue = getMonthlyRevenueByMethod(state, "card");
   const cashRevenue = getMonthlyRevenueByMethod(state, "cash");
 

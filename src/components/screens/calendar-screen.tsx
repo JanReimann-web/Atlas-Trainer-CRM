@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useCRM, useLocaleContext } from "@/components/app-providers";
 import { EmptyState, SectionCard, StatusBadge } from "@/components/crm-ui";
+import { getLocalDateKey } from "@/lib/date";
 import { getClient } from "@/lib/selectors";
 import { PageLead, TimelineItem } from "@/components/screens/shared";
 
@@ -30,7 +31,10 @@ export function CalendarScreen() {
 
   const sessionsByDay = upcomingSessions.reduce<Record<string, typeof state.sessions>>(
     (acc, session) => {
-      const key = session.startAt.slice(0, 10);
+      const key = getLocalDateKey(session.startAt);
+      if (!key) {
+        return acc;
+      }
       acc[key] = [...(acc[key] ?? []), session];
       return acc;
     },
@@ -138,7 +142,9 @@ export function CalendarScreen() {
                     className="rounded-[26px] border border-[color:var(--line-soft)] bg-white/60 p-4"
                   >
                     <p className="font-semibold text-[color:var(--ink)]">
-                      {formatDate(`${date}T00:00:00.000Z`, { day: "numeric", month: "long" })}
+                      {sessions[0]
+                        ? formatDate(sessions[0].startAt, { day: "numeric", month: "long" })
+                        : date}
                     </p>
                     <div className="mt-3 space-y-3">
                       {sessions

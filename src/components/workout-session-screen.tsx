@@ -16,38 +16,11 @@ import {
   getSessionCompletion,
   summarizeExerciseAdjustments,
 } from "@/lib/selectors";
+import { getDateInputValueFromIso, getTimeInputValueFromIso } from "@/lib/date";
 import { Session, TrainingLocation } from "@/lib/types";
 import { PageLead } from "@/components/screens/shared";
 
 type DraftKind = "workout-summary" | "next-session";
-
-function dateInputFromIso(value?: string) {
-  if (!value) {
-    return "";
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-
-  return parsed.toISOString().slice(0, 10);
-}
-
-function timeInputFromIso(value?: string) {
-  if (!value) {
-    return "09:00";
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return "09:00";
-  }
-
-  return `${String(parsed.getUTCHours()).padStart(2, "0")}:${String(
-    parsed.getUTCMinutes(),
-  ).padStart(2, "0")}`;
-}
 
 function durationInputFromSession(startAt?: string, endAt?: string) {
   if (!startAt || !endAt) {
@@ -136,9 +109,13 @@ function SessionScheduleCard({
     location: string;
   }) => void;
 }) {
-  const { t, formatDate } = useLocaleContext();
-  const [sessionDate, setSessionDate] = useState(() => dateInputFromIso(session.startAt));
-  const [startTime, setStartTime] = useState(() => timeInputFromIso(session.startAt));
+  const { t, locale, formatDate } = useLocaleContext();
+  const [sessionDate, setSessionDate] = useState(() =>
+    getDateInputValueFromIso(session.startAt),
+  );
+  const [startTime, setStartTime] = useState(() =>
+    getTimeInputValueFromIso(session.startAt),
+  );
   const [durationMinutes, setDurationMinutes] = useState(() =>
     durationInputFromSession(session.startAt, session.endAt),
   );
@@ -158,6 +135,7 @@ function SessionScheduleCard({
         <DataLabel label={t("fields.sessionDate")}>
           <input
             type="date"
+            lang={locale === "et" ? "et-EE" : "en-GB"}
             value={sessionDate}
             onChange={(event) => setSessionDate(event.target.value)}
             className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/90 px-4 py-3 text-sm outline-none"
@@ -166,6 +144,7 @@ function SessionScheduleCard({
         <DataLabel label={t("fields.startTime")}>
           <input
             type="time"
+            lang={locale === "et" ? "et-EE" : "en-GB"}
             value={startTime}
             onChange={(event) => setStartTime(event.target.value)}
             className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/90 px-4 py-3 text-sm outline-none"

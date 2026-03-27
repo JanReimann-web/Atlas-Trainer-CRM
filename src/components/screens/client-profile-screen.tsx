@@ -34,17 +34,13 @@ import {
   PaymentMethod,
   PaymentStatus,
 } from "@/lib/types";
+import {
+  addMinutesToIso,
+  buildIsoFromDate,
+  buildIsoFromDateTime,
+  getDateInputValue,
+} from "@/lib/date";
 import { PageLead } from "@/components/screens/shared";
-
-function dateInputValue(offsetDays = 0) {
-  const date = new Date();
-  date.setDate(date.getDate() + offsetDays);
-  return date.toISOString().slice(0, 10);
-}
-
-function isoFromDate(date: string, hour: number) {
-  return `${date}T${String(hour).padStart(2, "0")}:00:00.000Z`;
-}
 
 const defaultClientProfileForm = {
   fullName: "",
@@ -172,7 +168,7 @@ function createWorkoutEntryForm(defaultLocation = "") {
     status: "planned",
     title: "",
     objective: "",
-    sessionDate: dateInputValue(),
+    sessionDate: getDateInputValue(),
     startTime: "08:00",
     durationMinutes: "60",
     kind: "solo",
@@ -213,24 +209,14 @@ function createPackageForm(templateId = "", templatePrice = 0): PackageForm {
   return {
     templateId,
     sharedClientId: "",
-    purchasedDate: dateInputValue(),
-    startsDate: dateInputValue(),
-    expiresDate: dateInputValue(60),
+    purchasedDate: getDateInputValue(),
+    startsDate: getDateInputValue(),
+    expiresDate: getDateInputValue(60),
     paymentStatus: "paid",
     paymentMethod: "card",
     amountPaid: templatePrice > 0 ? String(templatePrice) : "",
     notes: "",
   };
-}
-
-function combineDateTime(date: string, time: string) {
-  return `${date}T${time}:00.000Z`;
-}
-
-function addMinutesToIso(value: string, minutes: number) {
-  const date = new Date(value);
-  date.setUTCMinutes(date.getUTCMinutes() + minutes);
-  return date.toISOString();
 }
 
 export function ClientProfileScreen({ clientId }: { clientId: string }) {
@@ -242,7 +228,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     updateClient,
     refreshNutritionPlan,
   } = useCRM();
-  const { t, formatDate, formatCurrency } = useLocaleContext();
+  const { t, locale, formatDate, formatCurrency } = useLocaleContext();
   const client = getClient(state, clientId);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState(() => buildClientProfileForm(client));
@@ -256,7 +242,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     ),
   );
   const [assessmentForm, setAssessmentForm] = useState({
-    recordedDate: dateInputValue(),
+    recordedDate: getDateInputValue(),
     notes: "",
     metrics: [createAssessmentMetricForm()],
   });
@@ -541,9 +527,9 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
           ? [packageForm.sharedClientId]
           : [],
       templateId: packageForm.templateId,
-      purchasedAt: isoFromDate(packageForm.purchasedDate, 9),
-      startsAt: isoFromDate(packageForm.startsDate, 9),
-      expiresAt: isoFromDate(packageForm.expiresDate, 21),
+      purchasedAt: buildIsoFromDate(packageForm.purchasedDate, 9),
+      startsAt: buildIsoFromDate(packageForm.startsDate, 9),
+      expiresAt: buildIsoFromDate(packageForm.expiresDate, 21),
       paymentStatus: packageForm.paymentStatus as CreatePackagePurchaseInput["paymentStatus"],
       amountPaid,
       paymentMethod: packageForm.paymentMethod,
@@ -578,14 +564,14 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
 
     const input: CreateBodyAssessmentInput = {
       clientId,
-      recordedAt: isoFromDate(assessmentForm.recordedDate, 8),
+      recordedAt: buildIsoFromDate(assessmentForm.recordedDate, 8),
       notes: assessmentForm.notes.trim(),
       metrics,
     };
 
     addBodyAssessment(input);
     setAssessmentForm({
-      recordedDate: dateInputValue(),
+      recordedDate: getDateInputValue(),
       notes: "",
       metrics: [createAssessmentMetricForm()],
     });
@@ -634,7 +620,10 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
       return;
     }
 
-    const startAt = combineDateTime(workoutEntryForm.sessionDate, workoutEntryForm.startTime);
+    const startAt = buildIsoFromDateTime(
+      workoutEntryForm.sessionDate,
+      workoutEntryForm.startTime,
+    );
     const endAt = addMinutesToIso(startAt, durationMinutes);
     const input: CreateWorkoutSessionInput = {
       clientId,
@@ -1185,6 +1174,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                 <DataLabel label={t("fields.purchasedAt")}>
                   <input
                     type="date"
+                    lang={locale === "et" ? "et-EE" : "en-GB"}
                     value={packageForm.purchasedDate}
                     onChange={(event) =>
                       setPackageForm((current) => ({ ...current, purchasedDate: event.target.value }))
@@ -1195,6 +1185,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                 <DataLabel label={t("fields.startsAt")}>
                   <input
                     type="date"
+                    lang={locale === "et" ? "et-EE" : "en-GB"}
                     value={packageForm.startsDate}
                     onChange={(event) =>
                       setPackageForm((current) => ({ ...current, startsDate: event.target.value }))
@@ -1205,6 +1196,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                 <DataLabel label={t("fields.expiresAt")}>
                   <input
                     type="date"
+                    lang={locale === "et" ? "et-EE" : "en-GB"}
                     value={packageForm.expiresDate}
                     onChange={(event) =>
                       setPackageForm((current) => ({ ...current, expiresDate: event.target.value }))
@@ -1462,6 +1454,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                 <DataLabel label={t("fields.sessionDate")}>
                   <input
                     type="date"
+                    lang={locale === "et" ? "et-EE" : "en-GB"}
                     value={workoutEntryForm.sessionDate}
                     onChange={(event) =>
                       setWorkoutEntryForm((current) => ({
@@ -1475,6 +1468,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                 <DataLabel label={t("fields.startTime")}>
                   <input
                     type="time"
+                    lang={locale === "et" ? "et-EE" : "en-GB"}
                     value={workoutEntryForm.startTime}
                     onChange={(event) =>
                       setWorkoutEntryForm((current) => ({
@@ -1766,6 +1760,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
             <DataLabel label={t("fields.assessmentDate")}>
               <input
                 type="date"
+                lang={locale === "et" ? "et-EE" : "en-GB"}
                 value={assessmentForm.recordedDate}
                 onChange={(event) =>
                   setAssessmentForm((current) => ({ ...current, recordedDate: event.target.value }))
