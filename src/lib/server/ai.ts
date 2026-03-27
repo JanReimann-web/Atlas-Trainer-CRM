@@ -7,7 +7,10 @@ import {
   NutritionPlan,
   PlannedWorkout,
   Session,
+  SessionKind,
   SessionWorkout,
+  TrainingLocation,
+  WorkoutExerciseInput,
   WorkoutPlan,
 } from "@/lib/types";
 import { summarizeExerciseAdjustments } from "@/lib/selectors";
@@ -36,6 +39,28 @@ type NutritionPlanInput = {
   currentNutritionPlan?: NutritionPlan | null;
   recentAssessments: BodyAssessment[];
   recentSessions: Session[];
+};
+
+type FirstWorkoutInput = {
+  locale: Locale;
+  client: ClientProfile;
+  recentAssessments: BodyAssessment[];
+  recentSessions: Session[];
+  trainingLocations?: TrainingLocation[];
+};
+
+type GeneratedFirstWorkout = {
+  planTitle: string;
+  planGoal: string;
+  focusAreas: string[];
+  sessionPattern: string[];
+  sessionTitle: string;
+  sessionObjective: string;
+  sessionKind: SessionKind;
+  location: string;
+  coachNote: string;
+  sessionNote: string;
+  exercises: WorkoutExerciseInput[];
 };
 
 type DraftFields = Pick<AIDraft, "title" | "subject" | "body" | "internalNote">;
@@ -231,6 +256,789 @@ function parseNutritionPlanFields(raw: string | null | undefined) {
   }
 
   return null;
+}
+
+function normalizeWorkoutExerciseInput(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const rawExercise = value as Record<string, unknown>;
+  const name = typeof rawExercise.name === "string" ? rawExercise.name.trim() : "";
+  if (!name) {
+    return null;
+  }
+
+  const sets: WorkoutExerciseInput["sets"] = Array.isArray(rawExercise.sets)
+    ? rawExercise.sets
+        .map<WorkoutExerciseInput["sets"][number] | null>((setValue, index) => {
+          if (!setValue || typeof setValue !== "object") {
+            return null;
+          }
+
+          const rawSet = setValue as Record<string, unknown>;
+          const reps = typeof rawSet.reps === "string" ? rawSet.reps.trim() : "";
+          if (!reps) {
+            return null;
+          }
+
+          return {
+            label:
+              typeof rawSet.label === "string" && rawSet.label.trim()
+                ? rawSet.label.trim()
+                : String(index + 1),
+            reps,
+            weightKg:
+              typeof rawSet.weightKg === "number" && Number.isFinite(rawSet.weightKg)
+                ? rawSet.weightKg
+                : undefined,
+            tempo:
+              typeof rawSet.tempo === "string" && rawSet.tempo.trim()
+                ? rawSet.tempo.trim()
+                : undefined,
+            rpe:
+              typeof rawSet.rpe === "number" && Number.isFinite(rawSet.rpe)
+                ? rawSet.rpe
+                : undefined,
+            note:
+              typeof rawSet.note === "string" && rawSet.note.trim()
+                ? rawSet.note.trim()
+                : undefined,
+          } satisfies WorkoutExerciseInput["sets"][number];
+        })
+        .filter((set): set is WorkoutExerciseInput["sets"][number] => set !== null)
+    : [];
+
+  if (sets.length === 0) {
+    return null;
+  }
+
+  const focus =
+    typeof rawExercise.focus === "string" && rawExercise.focus.trim()
+      ? rawExercise.focus.trim()
+      : undefined;
+  const note =
+    typeof rawExercise.note === "string" && rawExercise.note.trim()
+      ? rawExercise.note.trim()
+      : undefined;
+
+  return {
+    name,
+    focus,
+    note,
+    sets,
+  } satisfies WorkoutExerciseInput;
+}
+
+function parseFirstWorkoutFields(raw: string | null | undefined) {
+  if (!raw) {
+    return null;
+  }
+
+  const cleaned = raw
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  const candidates = [cleaned];
+  const objectStart = cleaned.indexOf("{");
+  const objectEnd = cleaned.lastIndexOf("}");
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    candidates.push(cleaned.slice(objectStart, objectEnd + 1));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as Partial<GeneratedFirstWorkout>;
+      if (
+        typeof parsed.planTitle !== "string" ||
+        typeof parsed.planGoal !== "string" ||
+        typeof parsed.sessionTitle !== "string" ||
+        typeof parsed.sessionObjective !== "string" ||
+        typeof parsed.location !== "string" ||
+        typeof parsed.coachNote !== "string" ||
+        typeof parsed.sessionNote !== "string" ||
+        !Array.isArray(parsed.focusAreas) ||
+        !Array.isArray(parsed.sessionPattern) ||
+        !Array.isArray(parsed.exercises)
+      ) {
+        continue;
+      }
+
+      const sessionKind =
+        parsed.sessionKind === "solo" ||
+        parsed.sessionKind === "duo" ||
+        parsed.sessionKind === "group"
+          ? parsed.sessionKind
+          : null;
+      if (!sessionKind) {
+        continue;
+      }
+
+      const exercises = parsed.exercises
+        .map<WorkoutExerciseInput | null>((exercise) =>
+          normalizeWorkoutExerciseInput(exercise),
+        )
+        .filter((exercise): exercise is WorkoutExerciseInput => exercise !== null);
+
+      if (exercises.length === 0) {
+        continue;
+      }
+
+      return {
+        planTitle: parsed.planTitle.trim(),
+        planGoal: parsed.planGoal.trim(),
+        focusAreas: parsed.focusAreas
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .slice(0, 4),
+        sessionPattern: parsed.sessionPattern
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .slice(0, 4),
+        sessionTitle: parsed.sessionTitle.trim(),
+        sessionObjective: parsed.sessionObjective.trim(),
+        sessionKind,
+        location: parsed.location.trim(),
+        coachNote: parsed.coachNote.trim(),
+        sessionNote: parsed.sessionNote.trim(),
+        exercises,
+      } satisfies GeneratedFirstWorkout;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function takeFirstNonEmpty(primary: string | undefined, fallback: string) {
+  const nextValue = primary?.trim();
+  return nextValue && nextValue.length > 0 ? nextValue : fallback;
+}
+
+function mergeStringLists(primary: string[], fallback: string[], limit = 4) {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+
+  [...primary, ...fallback].forEach((value) => {
+    const normalized = value.trim();
+    const key = normalized.toLowerCase();
+    if (!normalized || seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    merged.push(normalized);
+  });
+
+  return merged.slice(0, limit);
+}
+
+function ensureFiveExercises(
+  primary: WorkoutExerciseInput[],
+  fallback: WorkoutExerciseInput[],
+) {
+  const nextExercises: WorkoutExerciseInput[] = [];
+  const seen = new Set<string>();
+
+  [...primary, ...fallback].forEach((exercise) => {
+    if (nextExercises.length >= 5) {
+      return;
+    }
+
+    const key = exercise.name.trim().toLowerCase();
+    if (!key || seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    nextExercises.push(exercise);
+  });
+
+  return nextExercises.slice(0, 5);
+}
+
+function inferSessionKind(client: ClientProfile): SessionKind {
+  const profileText = [client.gender, ...client.tags, ...client.goals, client.notes]
+    .join(" ")
+    .toLowerCase();
+
+  if (/(small group|group|micro-group)/i.test(profileText)) {
+    return "group";
+  }
+
+  if (/\bduo\b|partner|friend/i.test(profileText)) {
+    return "duo";
+  }
+
+  return "solo";
+}
+
+function inferPrimaryTrainingTheme(client: ClientProfile) {
+  const profileText = [
+    client.gender,
+    ...client.tags,
+    ...client.goals,
+    client.notes,
+    ...client.healthFlags.map((flag) => `${flag.title} ${flag.detail}`),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return {
+    profileText,
+    isPostpartum: /postpartum|pelvic floor/i.test(profileText),
+    isBeginner: /beginner|confidence|machine|first gym/i.test(profileText),
+    wantsFatLoss: /fat loss|waist|reduction|lean/i.test(profileText),
+    wantsMassGain: /mass gain|muscle|bulk|hypertrophy/i.test(profileText),
+    wantsLowerBody: /lower-body|lower body|glute|leg/i.test(profileText),
+    wantsPosture: /posture|thoracic|desk|neck|shoulder/i.test(profileText),
+    wantsCoreControl: /core control|core|stability/i.test(profileText),
+    kneeSensitive: /knee/i.test(profileText),
+    shoulderSensitive: /shoulder/i.test(profileText),
+  };
+}
+
+function getPreferredLocation(input: FirstWorkoutInput) {
+  return (
+    input.trainingLocations?.[0]?.name?.trim() ||
+    input.recentSessions[0]?.location?.trim() ||
+    "Atlas Studio A"
+  );
+}
+
+function buildExerciseSet(
+  label: string,
+  reps: string,
+  extras?: Partial<WorkoutExerciseInput["sets"][number]>,
+) {
+  return {
+    label,
+    reps,
+    ...extras,
+  };
+}
+
+function buildFallbackExercises(input: FirstWorkoutInput): WorkoutExerciseInput[] {
+  const { locale } = input;
+  const theme = inferPrimaryTrainingTheme(input.client);
+
+  if (locale === "et") {
+    if (theme.isPostpartum || theme.wantsCoreControl) {
+      return [
+        {
+          name: "Hingamine + dead bug",
+          focus: "Kere kontroll ja hingamisrutiin",
+          note: "Alusta rahuliku hingamise ja kere aktiveerimisega.",
+          sets: [
+            buildExerciseSet("1", "6/6", { tempo: "aeglane", rpe: 5 }),
+            buildExerciseSet("2", "6/6", { tempo: "aeglane", rpe: 5 }),
+          ],
+        },
+        {
+          name: "Karikakükk kastile",
+          focus: "Kontrollitud põlve- ja puusatöö",
+          note: theme.kneeSensitive
+            ? "Hoia liikumisulatus valuvaba ja tempo kontrollitud."
+            : "Õpeta stabiilne küki lähteasend ja hingamine.",
+          sets: [
+            buildExerciseSet("1", "8", { tempo: "3111", rpe: 6 }),
+            buildExerciseSet("2", "8", { tempo: "3111", rpe: 6 }),
+            buildExerciseSet("3", "8", { tempo: "3111", rpe: 7 }),
+          ],
+        },
+        {
+          name: "Istudes kaablisõudmine",
+          focus: "Ülaselja kontroll",
+          sets: [
+            buildExerciseSet("1", "10", { rpe: 6 }),
+            buildExerciseSet("2", "10", { rpe: 6 }),
+            buildExerciseSet("3", "10", { rpe: 7 }),
+          ],
+        },
+        {
+          name: "Rumeenia jõutõmme hantlitega",
+          focus: "Puusahinge baas",
+          sets: [
+            buildExerciseSet("1", "8", { tempo: "3011", rpe: 6 }),
+            buildExerciseSet("2", "8", { tempo: "3011", rpe: 6 }),
+            buildExerciseSet("3", "8", { tempo: "3011", rpe: 7 }),
+          ],
+        },
+        {
+          name: "Kohverkand",
+          focus: "Kere stabiilsus ja haardejõud",
+          sets: [
+            buildExerciseSet("1", "20 m / pool", { rpe: 6 }),
+            buildExerciseSet("2", "20 m / pool", { rpe: 6 }),
+          ],
+        },
+      ];
+    }
+
+    if (theme.wantsMassGain || theme.wantsPosture || theme.shoulderSensitive) {
+      return [
+        {
+          name: "Dead bug",
+          focus: "Kere pinge ja ribide kontroll",
+          sets: [
+            buildExerciseSet("1", "6/6", { tempo: "aeglane", rpe: 5 }),
+            buildExerciseSet("2", "6/6", { tempo: "aeglane", rpe: 5 }),
+          ],
+        },
+        {
+          name: "Karikakükk",
+          focus: "Täiskeha baasjõud",
+          sets: [
+            buildExerciseSet("1", "8", { tempo: "3011", rpe: 6 }),
+            buildExerciseSet("2", "8", { tempo: "3011", rpe: 6 }),
+            buildExerciseSet("3", "8", { tempo: "3011", rpe: 7 }),
+          ],
+        },
+        {
+          name: "Hantlitega kaldpingi surumine",
+          focus: "Õlasõbralik surumismuster",
+          note: theme.shoulderSensitive
+            ? "Hoia neutraalset haaret ja väldi valu."
+            : "Ehita kontrollitud ülakeha jõudu ilma liigselt tempot tõstmata.",
+          sets: [
+            buildExerciseSet("1", "8", { rpe: 6 }),
+            buildExerciseSet("2", "8", { rpe: 6 }),
+            buildExerciseSet("3", "8", { rpe: 7 }),
+          ],
+        },
+        {
+          name: "Rinnatoega sõudmine",
+          focus: "Rüht ja ülaselg",
+          sets: [
+            buildExerciseSet("1", "10", { rpe: 6 }),
+            buildExerciseSet("2", "10", { rpe: 6 }),
+            buildExerciseSet("3", "10", { rpe: 7 }),
+          ],
+        },
+        {
+          name: "Farmeri kand",
+          focus: "Tervikkeha pinge ja töövõime",
+          sets: [
+            buildExerciseSet("1", "25 m", { rpe: 6 }),
+            buildExerciseSet("2", "25 m", { rpe: 7 }),
+          ],
+        },
+      ];
+    }
+
+    if (theme.wantsLowerBody || theme.kneeSensitive || theme.wantsFatLoss) {
+      return [
+        {
+          name: "Dead bug",
+          focus: "Kere kontroll",
+          sets: [
+            buildExerciseSet("1", "6/6", { tempo: "aeglane", rpe: 5 }),
+            buildExerciseSet("2", "6/6", { tempo: "aeglane", rpe: 5 }),
+          ],
+        },
+        {
+          name: theme.kneeSensitive ? "Karikakükk kastile" : "Karikakükk",
+          focus: "Alakeha baasjõud",
+          note: theme.kneeSensitive
+            ? "Piira sügavust vastavalt põlvetaluvusele."
+            : "Hoia kere püstisem ja liikumine kontrollitud.",
+          sets: [
+            buildExerciseSet("1", "8", { tempo: "3111", rpe: 6 }),
+            buildExerciseSet("2", "8", { tempo: "3111", rpe: 6 }),
+            buildExerciseSet("3", "8", { tempo: "3111", rpe: 7 }),
+          ],
+        },
+        {
+          name: "Rumeenia jõutõmme hantlitega",
+          focus: "Tagakett",
+          sets: [
+            buildExerciseSet("1", "8", { rpe: 6 }),
+            buildExerciseSet("2", "8", { rpe: 6 }),
+            buildExerciseSet("3", "8", { rpe: 7 }),
+          ],
+        },
+        {
+          name: "Istudes kaablisõudmine",
+          focus: "Ülaselja stabiilsus",
+          sets: [
+            buildExerciseSet("1", "10", { rpe: 6 }),
+            buildExerciseSet("2", "10", { rpe: 6 }),
+            buildExerciseSet("3", "10", { rpe: 7 }),
+          ],
+        },
+        {
+          name: "Pallof press",
+          focus: "Pöördevastane kere töö",
+          sets: [
+            buildExerciseSet("1", "10/10", { rpe: 6 }),
+            buildExerciseSet("2", "10/10", { rpe: 6 }),
+          ],
+        },
+      ];
+    }
+
+    return [
+      {
+        name: "Dead bug",
+        focus: "Kere kontroll",
+        sets: [
+          buildExerciseSet("1", "6/6", { tempo: "aeglane", rpe: 5 }),
+          buildExerciseSet("2", "6/6", { tempo: "aeglane", rpe: 5 }),
+        ],
+      },
+      {
+        name: theme.isBeginner ? "Jalapress" : "Karikakükk",
+        focus: "Alakeha baas",
+        sets: [
+          buildExerciseSet("1", "10", { rpe: 6 }),
+          buildExerciseSet("2", "10", { rpe: 6 }),
+          buildExerciseSet("3", "10", { rpe: 7 }),
+        ],
+      },
+      {
+        name: "Hantlitega Rumeenia jõutõmme",
+        focus: "Puusahing ja tagakett",
+        sets: [
+          buildExerciseSet("1", "8", { rpe: 6 }),
+          buildExerciseSet("2", "8", { rpe: 6 }),
+          buildExerciseSet("3", "8", { rpe: 7 }),
+        ],
+      },
+      {
+        name: "Istudes sõudmine",
+        focus: "Rüht ja ülaselg",
+        sets: [
+          buildExerciseSet("1", "10", { rpe: 6 }),
+          buildExerciseSet("2", "10", { rpe: 6 }),
+          buildExerciseSet("3", "10", { rpe: 7 }),
+        ],
+      },
+      {
+        name: "Kaldpingil hantlitega surumine",
+        focus: "Turvaline ülakeha töö",
+        sets: [
+          buildExerciseSet("1", "8", { rpe: 6 }),
+          buildExerciseSet("2", "8", { rpe: 6 }),
+          buildExerciseSet("3", "8", { rpe: 7 }),
+        ],
+      },
+    ];
+  }
+
+  if (theme.isPostpartum || theme.wantsCoreControl) {
+    return [
+      {
+        name: "Breathing dead bug",
+        focus: "Core control and breathing sequence",
+        note: "Open the session with slow breathing and tension awareness.",
+        sets: [
+          buildExerciseSet("1", "6/6", { tempo: "slow", rpe: 5 }),
+          buildExerciseSet("2", "6/6", { tempo: "slow", rpe: 5 }),
+        ],
+      },
+      {
+        name: "Goblet box squat",
+        focus: "Controlled squat pattern",
+        note: theme.kneeSensitive
+          ? "Keep depth inside pain-free knee tolerance."
+          : "Use the box to keep tempo and bracing consistent.",
+        sets: [
+          buildExerciseSet("1", "8", { tempo: "3111", rpe: 6 }),
+          buildExerciseSet("2", "8", { tempo: "3111", rpe: 6 }),
+          buildExerciseSet("3", "8", { tempo: "3111", rpe: 7 }),
+        ],
+      },
+      {
+        name: "Seated cable row",
+        focus: "Upper-back control",
+        sets: [
+          buildExerciseSet("1", "10", { rpe: 6 }),
+          buildExerciseSet("2", "10", { rpe: 6 }),
+          buildExerciseSet("3", "10", { rpe: 7 }),
+        ],
+      },
+      {
+        name: "Dumbbell Romanian deadlift",
+        focus: "Hip hinge foundation",
+        sets: [
+          buildExerciseSet("1", "8", { tempo: "3011", rpe: 6 }),
+          buildExerciseSet("2", "8", { tempo: "3011", rpe: 6 }),
+          buildExerciseSet("3", "8", { tempo: "3011", rpe: 7 }),
+        ],
+      },
+      {
+        name: "Suitcase carry",
+        focus: "Core stability and grip",
+        sets: [
+          buildExerciseSet("1", "20 m / side", { rpe: 6 }),
+          buildExerciseSet("2", "20 m / side", { rpe: 6 }),
+        ],
+      },
+    ];
+  }
+
+  if (theme.wantsMassGain || theme.wantsPosture || theme.shoulderSensitive) {
+    return [
+      {
+        name: "Dead bug",
+        focus: "Ribcage and core tension",
+        sets: [
+          buildExerciseSet("1", "6/6", { tempo: "slow", rpe: 5 }),
+          buildExerciseSet("2", "6/6", { tempo: "slow", rpe: 5 }),
+        ],
+      },
+      {
+        name: "Goblet squat",
+        focus: "Full-body strength base",
+        sets: [
+          buildExerciseSet("1", "8", { tempo: "3011", rpe: 6 }),
+          buildExerciseSet("2", "8", { tempo: "3011", rpe: 6 }),
+          buildExerciseSet("3", "8", { tempo: "3011", rpe: 7 }),
+        ],
+      },
+      {
+        name: "Incline dumbbell press",
+        focus: "Shoulder-friendly press pattern",
+        note: theme.shoulderSensitive
+          ? "Keep a neutral grip and stop short of any shoulder irritation."
+          : "Build pressing strength with controlled range.",
+        sets: [
+          buildExerciseSet("1", "8", { rpe: 6 }),
+          buildExerciseSet("2", "8", { rpe: 6 }),
+          buildExerciseSet("3", "8", { rpe: 7 }),
+        ],
+      },
+      {
+        name: "Chest-supported row",
+        focus: "Posture and upper-back strength",
+        sets: [
+          buildExerciseSet("1", "10", { rpe: 6 }),
+          buildExerciseSet("2", "10", { rpe: 6 }),
+          buildExerciseSet("3", "10", { rpe: 7 }),
+        ],
+      },
+      {
+        name: "Farmer carry",
+        focus: "Whole-body tension and work capacity",
+        sets: [
+          buildExerciseSet("1", "25 m", { rpe: 6 }),
+          buildExerciseSet("2", "25 m", { rpe: 7 }),
+        ],
+      },
+    ];
+  }
+
+  if (theme.wantsLowerBody || theme.kneeSensitive || theme.wantsFatLoss) {
+    return [
+      {
+        name: "Dead bug",
+        focus: "Core control",
+        sets: [
+          buildExerciseSet("1", "6/6", { tempo: "slow", rpe: 5 }),
+          buildExerciseSet("2", "6/6", { tempo: "slow", rpe: 5 }),
+        ],
+      },
+      {
+        name: theme.kneeSensitive ? "Goblet squat to box" : "Goblet squat",
+        focus: "Lower-body strength base",
+        note: theme.kneeSensitive
+          ? "Keep the range inside current knee tolerance."
+          : "Use controlled tempo and stable foot pressure.",
+        sets: [
+          buildExerciseSet("1", "8", { tempo: "3111", rpe: 6 }),
+          buildExerciseSet("2", "8", { tempo: "3111", rpe: 6 }),
+          buildExerciseSet("3", "8", { tempo: "3111", rpe: 7 }),
+        ],
+      },
+      {
+        name: "Dumbbell Romanian deadlift",
+        focus: "Posterior-chain awareness",
+        sets: [
+          buildExerciseSet("1", "8", { rpe: 6 }),
+          buildExerciseSet("2", "8", { rpe: 6 }),
+          buildExerciseSet("3", "8", { rpe: 7 }),
+        ],
+      },
+      {
+        name: "Seated cable row",
+        focus: "Upper-back support",
+        sets: [
+          buildExerciseSet("1", "10", { rpe: 6 }),
+          buildExerciseSet("2", "10", { rpe: 6 }),
+          buildExerciseSet("3", "10", { rpe: 7 }),
+        ],
+      },
+      {
+        name: "Pallof press",
+        focus: "Anti-rotation trunk control",
+        sets: [
+          buildExerciseSet("1", "10/10", { rpe: 6 }),
+          buildExerciseSet("2", "10/10", { rpe: 6 }),
+        ],
+      },
+    ];
+  }
+
+  return [
+    {
+      name: "Dead bug",
+      focus: "Core control",
+      sets: [
+        buildExerciseSet("1", "6/6", { tempo: "slow", rpe: 5 }),
+        buildExerciseSet("2", "6/6", { tempo: "slow", rpe: 5 }),
+      ],
+    },
+    {
+      name: theme.isBeginner ? "Leg press" : "Goblet squat",
+      focus: "Lower-body foundation",
+      sets: [
+        buildExerciseSet("1", "10", { rpe: 6 }),
+        buildExerciseSet("2", "10", { rpe: 6 }),
+        buildExerciseSet("3", "10", { rpe: 7 }),
+      ],
+    },
+    {
+      name: "Dumbbell Romanian deadlift",
+      focus: "Hip hinge pattern",
+      sets: [
+        buildExerciseSet("1", "8", { rpe: 6 }),
+        buildExerciseSet("2", "8", { rpe: 6 }),
+        buildExerciseSet("3", "8", { rpe: 7 }),
+      ],
+    },
+    {
+      name: "Seated row",
+      focus: "Upper-back control",
+      sets: [
+        buildExerciseSet("1", "10", { rpe: 6 }),
+        buildExerciseSet("2", "10", { rpe: 6 }),
+        buildExerciseSet("3", "10", { rpe: 7 }),
+      ],
+    },
+    {
+      name: "Incline dumbbell press",
+      focus: "Simple press pattern",
+      sets: [
+        buildExerciseSet("1", "8", { rpe: 6 }),
+        buildExerciseSet("2", "8", { rpe: 6 }),
+        buildExerciseSet("3", "8", { rpe: 7 }),
+      ],
+    },
+  ];
+}
+
+function buildFallbackFirstWorkout(input: FirstWorkoutInput): GeneratedFirstWorkout {
+  const { locale, client, recentAssessments } = input;
+  const latestAssessment = getLatestAssessment(recentAssessments);
+  const theme = inferPrimaryTrainingTheme(client);
+  const primaryGoal = client.goals[0]?.trim() || (locale === "et" ? "kindel treeningu rutiin" : "a consistent training routine");
+  const focusAreas =
+    locale === "et"
+      ? mergeStringLists(
+          [
+            theme.wantsLowerBody ? "Alakeha baasjõud" : "",
+            theme.wantsPosture ? "Rüht ja ülaselg" : "",
+            theme.wantsCoreControl || theme.isPostpartum ? "Kere kontroll" : "",
+            theme.wantsFatLoss ? "Töövõime ja liikumiskvaliteet" : "Liigutuste tehnika",
+          ].filter(Boolean),
+          [primaryGoal, "Tempo kontroll", "Koormuse taluvuse jälgimine"],
+        )
+      : mergeStringLists(
+          [
+            theme.wantsLowerBody ? "Lower-body strength base" : "",
+            theme.wantsPosture ? "Posture and upper-back strength" : "",
+            theme.wantsCoreControl || theme.isPostpartum ? "Core control" : "",
+            theme.wantsFatLoss ? "Work capacity and movement quality" : "Technique quality",
+          ].filter(Boolean),
+          [primaryGoal, "Tempo control", "Load tolerance monitoring"],
+        );
+  const sessionPattern =
+    locale === "et"
+      ? mergeStringLists(
+          ["Täiskeha baas", "Tehnika enne koormust", "Mõõdukas RPE"],
+          theme.isBeginner ? ["Selged õpetuspunktid"] : ["Progressioon järgmise sessiooni jaoks"],
+        )
+      : mergeStringLists(
+          ["Full-body foundation", "Technique before load", "Moderate RPE"],
+          theme.isBeginner ? ["Simple coaching cues"] : ["Progression path for the next session"],
+        );
+
+  return {
+    planTitle:
+      locale === "et"
+        ? `Alustusplokk: ${primaryGoal}`
+        : `Starter block: ${primaryGoal}`,
+    planGoal:
+      locale === "et"
+        ? `Ehita esimese kahe nädala jooksul turvaline ja järjepidev algus eesmärgiga ${primaryGoal.toLowerCase()}.`
+        : `Build a safe and consistent first two weeks around ${primaryGoal.toLowerCase()}.`,
+    focusAreas,
+    sessionPattern,
+    sessionTitle:
+      locale === "et"
+        ? "1. treening: baasliikumised ja koormuse tunnetus"
+        : "Session 1: movement foundations and load feel",
+    sessionObjective:
+      locale === "et"
+        ? "Õpeta 5 põhiharjutust, hinda liikumiskvaliteeti ja salvesta turvaline esimene koormustase."
+        : "Teach 5 core exercises, assess movement quality, and capture a safe starting load.",
+    sessionKind: inferSessionKind(client),
+    location: getPreferredLocation(input),
+    coachNote:
+      locale === "et"
+        ? [
+            `Hoia esimene sessioon mõõdukal raskusel ja kogu märkmeid selle kohta, kuidas klient reageerib juhendamisele ning koormusele.`,
+            latestAssessment?.notes
+              ? `Viimane kehaanalüüs: ${latestAssessment.notes}`
+              : "Kui varasemaid mõõtmisi ei ole, kasuta esimest treeningut baasjoone loomiseks.",
+          ].join(" ")
+        : [
+            "Keep the first session at a moderate difficulty and capture how the client responds to coaching cues and load.",
+            latestAssessment?.notes
+              ? `Latest body assessment note: ${latestAssessment.notes}`
+              : "If there are no prior assessments, use this session to establish the first baseline.",
+          ].join(" "),
+    sessionNote:
+      locale === "et"
+        ? "Esimene trenn keskendub tehnikale, enesetundele ja turvalisele algtasemele."
+        : "This first session focuses on technique, readiness, and a safe starting baseline.",
+    exercises: buildFallbackExercises(input),
+  };
+}
+
+function mergeFirstWorkoutWithFallback(
+  fallback: GeneratedFirstWorkout,
+  parsed: GeneratedFirstWorkout | null,
+): GeneratedFirstWorkout {
+  if (!parsed) {
+    return {
+      ...fallback,
+      exercises: ensureFiveExercises([], fallback.exercises),
+    };
+  }
+
+  return {
+    planTitle: takeFirstNonEmpty(parsed.planTitle, fallback.planTitle),
+    planGoal: takeFirstNonEmpty(parsed.planGoal, fallback.planGoal),
+    focusAreas: mergeStringLists(parsed.focusAreas, fallback.focusAreas),
+    sessionPattern: mergeStringLists(parsed.sessionPattern, fallback.sessionPattern),
+    sessionTitle: takeFirstNonEmpty(parsed.sessionTitle, fallback.sessionTitle),
+    sessionObjective: takeFirstNonEmpty(
+      parsed.sessionObjective,
+      fallback.sessionObjective,
+    ),
+    sessionKind: parsed.sessionKind ?? fallback.sessionKind,
+    location: takeFirstNonEmpty(parsed.location, fallback.location),
+    coachNote: takeFirstNonEmpty(parsed.coachNote, fallback.coachNote),
+    sessionNote: takeFirstNonEmpty(parsed.sessionNote, fallback.sessionNote),
+    exercises: ensureFiveExercises(parsed.exercises, fallback.exercises),
+  };
 }
 
 function roundToNearest(value: number, step = 5) {
@@ -489,6 +1297,43 @@ async function enhanceNutritionPlanWithOpenAI(
     ...parsed,
     ...mealDistribution,
   };
+}
+
+async function enhanceFirstWorkoutWithOpenAI(
+  fallback: GeneratedFirstWorkout,
+  input: FirstWorkoutInput,
+) {
+  const client = getOpenAIClient();
+  const model = getOpenAIModel();
+
+  if (!client || !model) {
+    return fallback;
+  }
+
+  const systemPrompt =
+    "You create the first coached workout for a CRM. Return valid JSON only with keys planTitle, planGoal, focusAreas, sessionPattern, sessionTitle, sessionObjective, sessionKind, location, coachNote, sessionNote, exercises. sessionKind must be one of solo, duo, group. focusAreas and sessionPattern should each have 2 to 4 concise strings. exercises must contain exactly 5 exercise objects, and each exercise must have name, optional focus, optional note, and a non-empty sets array. Each set must have label and reps, with optional weightKg, tempo, rpe, and note. Do not use markdown, code fences, or commentary outside JSON. Do not invent medical facts or equipment that conflicts with the context.";
+
+  const response = await client.responses.create({
+    model,
+    input: `${systemPrompt}\n\nTask:\n${
+      input.locale === "et"
+        ? "Koosta uue kliendi esimene treening ja sellega seotud treeninguploki algus. Treening peab olema turvaline, mõõdukas, õpetusliku iseloomuga ja sisaldama täpselt 5 harjutust."
+        : "Create the first workout and starter block for a new client. The session should be safe, moderate, instructional, and contain exactly 5 exercises."
+    }\n\nFallback JSON:\n${safeJsonStringify(
+      fallback,
+    )}\n\nContext JSON:\n${safeJsonStringify({
+      locale: input.locale,
+      client: input.client,
+      recentAssessments: input.recentAssessments.slice(0, 4),
+      recentSessions: input.recentSessions.slice(0, 4),
+      trainingLocations: input.trainingLocations?.slice(0, 5),
+    })}`,
+  });
+
+  return mergeFirstWorkoutWithFallback(
+    fallback,
+    parseFirstWorkoutFields(response.output_text),
+  );
 }
 
 function buildFallbackWorkoutSummaryDraft(input: WorkoutSummaryInput) {
@@ -796,5 +1641,19 @@ export async function buildNutritionPlanRecommendation(input: NutritionPlanInput
   } catch (error) {
     console.error("OpenAI nutrition plan generation failed.", error);
     return fallback;
+  }
+}
+
+export async function buildFirstWorkoutRecommendation(input: FirstWorkoutInput) {
+  const fallback = buildFallbackFirstWorkout(input);
+
+  try {
+    return await enhanceFirstWorkoutWithOpenAI(fallback, input);
+  } catch (error) {
+    console.error("OpenAI first workout generation failed.", error);
+    return {
+      ...fallback,
+      exercises: ensureFiveExercises([], fallback.exercises),
+    };
   }
 }

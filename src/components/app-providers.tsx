@@ -262,6 +262,24 @@ function subtractHours(value: string, hours: number) {
   return date.toISOString();
 }
 
+function buildInitialSessionWindow(anchorAt: string) {
+  const start = new Date(anchorAt);
+  if (Number.isNaN(start.getTime())) {
+    start.setTime(Date.now());
+  }
+
+  start.setUTCDate(start.getUTCDate() + 2);
+  start.setUTCHours(9, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setUTCHours(end.getUTCHours() + 1);
+
+  return {
+    startAt: start.toISOString(),
+    endAt: end.toISOString(),
+  };
+}
+
 function randomHue() {
   return Math.floor(Math.random() * 360);
 }
@@ -370,6 +388,169 @@ function updateWorkout(
         ? updater({ ...workout, updatedAt: timestamp() })
         : workout,
     ),
+  };
+}
+
+function createWorkoutSessionState(
+  previous: CRMState,
+  input: CreateWorkoutSessionInput,
+  actor: string,
+  options?: {
+    sourcePlanId?: string;
+    activityType?: string;
+    activityDetail?: string;
+  },
+): CRMState {
+  const exercises = normalizeWorkoutExercises(input.exercises);
+  const normalizedLocation =
+    normalizeCatalogName(input.location) ||
+    previous.trainingLocations[0]?.name ||
+    "Atlas Studio";
+
+  if (!input.title.trim() || !input.startAt || !input.endAt || exercises.length === 0) {
+    return previous;
+  }
+
+  const now = timestamp();
+  const sessionId = `session-${crypto.randomUUID()}`;
+  const plannedWorkoutId = `pw-${crypto.randomUUID()}`;
+  const sessionWorkoutId = `sw-${crypto.randomUUID()}`;
+  const sourcePlanId =
+    options?.sourcePlanId ??
+    previous.workoutPlans.find(
+      (plan) => plan.clientId === input.clientId && plan.status === "active",
+    )?.id ??
+    undefined;
+  const plannedWorkout = {
+    id: plannedWorkoutId,
+    clientId: input.clientId,
+    sessionId,
+    sourcePlanId,
+    title: input.title.trim(),
+    objective: input.objective.trim(),
+    createdAt: now,
+    exercises: exercises.map((exercise) => ({
+      id: `pex-${crypto.randomUUID()}`,
+      name: exercise.name,
+      focus: exercise.focus,
+      note: exercise.note,
+      sets: exercise.sets.map((set) => ({
+        id: `ps-${crypto.randomUUID()}`,
+        label: set.label,
+        reps: set.reps,
+        weightKg: set.weightKg,
+        tempo: set.tempo,
+        rpe: set.rpe,
+        note: set.note,
+      })),
+    })),
+  };
+  const sessionWorkout: SessionWorkout = {
+    id: sessionWorkoutId,
+    sessionId,
+    title: input.title.trim(),
+    status: input.status === "completed" ? "completed" : "draft",
+    exercises: plannedWorkout.exercises.map((exercise) => ({
+      id: `sex-${crypto.randomUUID()}`,
+      plannedExerciseId: exercise.id,
+      name: exercise.name,
+      status: input.status === "completed" ? "completed" : "planned",
+      note: exercise.note,
+      sets: exercise.sets.map((set) => ({
+        id: `set-${crypto.randomUUID()}`,
+        label: set.label,
+        targetReps: set.reps,
+        actualReps: set.reps,
+        targetWeightKg: set.weightKg,
+        actualWeightKg: set.weightKg,
+        tempo: set.tempo,
+        rpe: set.rpe,
+        completed: input.status === "completed",
+        note: set.note,
+      })),
+    })),
+    coachNote: input.coachNote?.trim() ?? "",
+    athleteFacingNote: "",
+    updatedAt: now,
+  };
+  const reminderAt = input.status === "planned" ? subtractHours(input.startAt, 24) : undefined;
+  const hasLocation = previous.trainingLocations.some(
+    (location) => location.name.toLowerCase() === normalizedLocation.toLowerCase(),
+  );
+  const trainingLocations = hasLocation
+    ? previous.trainingLocations
+    : sortTrainingLocations([
+        ...previous.trainingLocations,
+        {
+          id: `location-${crypto.randomUUID()}`,
+          name: normalizedLocation,
+        },
+      ]);
+  const nextSession = {
+    id: sessionId,
+    title: input.title.trim(),
+    coachId: previous.users[0]?.id ?? "user-maria",
+    primaryClientId: input.clientId,
+    clientIds: [input.clientId],
+    kind: input.kind,
+    startAt: input.startAt,
+    endAt: input.endAt,
+    location: normalizedLocation,
+    status: input.status,
+    packagePurchaseId: input.packagePurchaseId,
+    plannedWorkoutId,
+    sessionWorkoutId,
+    reminderAt,
+    calendarSync: "manual" as const,
+    note: input.sessionNote?.trim() || input.objective.trim() || undefined,
+  };
+
+  return {
+    ...previous,
+    trainingLocations,
+    sessions: [nextSession, ...previous.sessions],
+    plannedWorkouts: [plannedWorkout, ...previous.plannedWorkouts],
+    sessionWorkouts: [sessionWorkout, ...previous.sessionWorkouts],
+    reminders:
+      input.status === "planned" && reminderAt
+        ? [
+            {
+              id: `rem-${crypto.randomUUID()}`,
+              clientId: input.clientId,
+              sessionId,
+              title: "24h reminder",
+              dueAt: reminderAt,
+              channel: "calendar",
+              status: "scheduled",
+            },
+            ...previous.reminders,
+          ]
+        : previous.reminders,
+    packagePurchases: previous.packagePurchases.map((purchase) =>
+      purchase.id === input.packagePurchaseId && input.status === "completed"
+        ? {
+            ...purchase,
+            usedUnits: Math.min(purchase.totalUnits, purchase.usedUnits + 1),
+          }
+        : purchase,
+    ),
+    activityEvents: [
+      {
+        id: `act-${crypto.randomUUID()}`,
+        actor,
+        clientId: input.clientId,
+        type:
+          options?.activityType ??
+          (input.status === "completed" ? "session.logged" : "session.planned"),
+        detail:
+          options?.activityDetail ??
+          (input.status === "completed"
+            ? `Logged historical workout ${input.title.trim()}.`
+            : `Planned workout ${input.title.trim()} from the client profile.`),
+        createdAt: now,
+      },
+      ...previous.activityEvents,
+    ],
   };
 }
 
@@ -990,6 +1171,161 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function generateInitialWorkout({
+    clientId,
+    clientOverride,
+  }: {
+    clientId: string;
+    clientOverride?: ClientProfile;
+  }) {
+    const snapshot = stateRef.current;
+    const client =
+      clientOverride ?? snapshot.clients.find((item) => item.id === clientId);
+    if (!client) {
+      return;
+    }
+
+    const clientAlreadyHasTraining =
+      snapshot.workoutPlans.some(
+        (plan) => plan.clientId === clientId && plan.status === "active",
+      ) ||
+      snapshot.sessions.some(
+        (session) =>
+          session.primaryClientId === clientId || session.clientIds.includes(clientId),
+      );
+
+    if (clientAlreadyHasTraining) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/ai/first-workout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          locale: client.preferredLanguage,
+          client,
+          recentAssessments: getClientAssessments(snapshot, clientId),
+          recentSessions: getClientSessions(snapshot, clientId),
+          trainingLocations: snapshot.trainingLocations,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Initial workout generation failed.");
+      }
+
+      const payload = (await response.json()) as {
+        workout: {
+          planTitle: string;
+          planGoal: string;
+          focusAreas: string[];
+          sessionPattern: string[];
+          sessionTitle: string;
+          sessionObjective: string;
+          sessionKind: CreateWorkoutSessionInput["kind"];
+          location: string;
+          coachNote: string;
+          sessionNote: string;
+          exercises: CreateWorkoutSessionInput["exercises"];
+        };
+      };
+
+      applyCRMUpdate((previous) => {
+        const currentClient = previous.clients.find((item) => item.id === clientId);
+        if (!currentClient) {
+          return previous;
+        }
+
+        const existingTraining =
+          previous.workoutPlans.some(
+            (plan) => plan.clientId === clientId && plan.status === "active",
+          ) ||
+          previous.sessions.some(
+            (session) =>
+              session.primaryClientId === clientId ||
+              session.clientIds.includes(clientId),
+          );
+
+        if (existingTraining) {
+          return previous;
+        }
+
+        const now = timestamp();
+        const nextPlanId = `wp-${crypto.randomUUID()}`;
+        const nextPlan = {
+          id: nextPlanId,
+          clientId,
+          title: payload.workout.planTitle.trim(),
+          status: "active" as const,
+          goal: payload.workout.planGoal.trim(),
+          focusAreas: payload.workout.focusAreas.filter(Boolean),
+          sessionPattern: payload.workout.sessionPattern.filter(Boolean),
+          activeFrom: currentClient.joinedAt,
+          createdAt: now,
+          updatedAt: now,
+          origin: "ai" as const,
+        };
+        const sessionWindow = buildInitialSessionWindow(currentClient.joinedAt);
+
+        const withPlan = {
+          ...previous,
+          workoutPlans: [
+            nextPlan,
+            ...previous.workoutPlans.map((plan) =>
+              plan.clientId === clientId && plan.status === "active"
+                ? {
+                    ...plan,
+                    status: "archived" as const,
+                    updatedAt: now,
+                  }
+                : plan,
+            ),
+          ],
+          activityEvents: [
+            {
+              id: `act-${crypto.randomUUID()}`,
+              actor: "AI",
+              clientId,
+              type: "workout-plan.created",
+              detail: `Generated the initial workout block for ${currentClient.fullName}.`,
+              createdAt: now,
+            },
+            ...previous.activityEvents,
+          ],
+        };
+
+        return createWorkoutSessionState(
+          withPlan,
+          {
+            clientId,
+            title: payload.workout.sessionTitle,
+            objective: payload.workout.sessionObjective,
+            startAt: sessionWindow.startAt,
+            endAt: sessionWindow.endAt,
+            kind: payload.workout.sessionKind,
+            status: "planned",
+            location: payload.workout.location,
+            coachNote: payload.workout.coachNote,
+            sessionNote: payload.workout.sessionNote,
+            exercises: payload.workout.exercises,
+          },
+          "AI",
+          {
+            sourcePlanId: nextPlanId,
+            activityType: "session.planned",
+            activityDetail: `AI generated the first workout for ${currentClient.fullName}.`,
+          },
+        );
+      });
+    } catch (error) {
+      console.error("Initial workout generation failed.", error);
+      setCrmError(
+        error instanceof Error ? error.message : "Initial workout generation failed.",
+      );
+    }
+  }
+
   const crmValue: CRMContextValue = {
     state,
     loading: authLoading || crmLoading,
@@ -1072,6 +1408,10 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           clientId: createdClientSnapshot.id,
           clientOverride: createdClientSnapshot,
           trigger: "client-create",
+        }).catch(() => undefined);
+        void generateInitialWorkout({
+          clientId: createdClientSnapshot.id,
+          clientOverride: createdClientSnapshot,
         });
       }
     },
@@ -1144,6 +1484,10 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           clientId: createdClientSnapshot.id,
           clientOverride: createdClientSnapshot,
           trigger: "client-create",
+        }).catch(() => undefined);
+        void generateInitialWorkout({
+          clientId: createdClientSnapshot.id,
+          clientOverride: createdClientSnapshot,
         });
       }
     },
@@ -1806,159 +2150,13 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         };
       }),
     addWorkoutSession: (input) =>
-      applyCRMUpdate((previous) => {
-        const exercises = normalizeWorkoutExercises(input.exercises);
-        const normalizedLocation =
-          normalizeCatalogName(input.location) ||
-          previous.trainingLocations[0]?.name ||
-          "Atlas Studio";
-        if (!input.title.trim() || !input.startAt || !input.endAt || exercises.length === 0) {
-          return previous;
-        }
-
-        const now = timestamp();
-        const sessionId = `session-${crypto.randomUUID()}`;
-        const plannedWorkoutId = `pw-${crypto.randomUUID()}`;
-        const sessionWorkoutId = `sw-${crypto.randomUUID()}`;
-        const sourcePlanId =
-          previous.workoutPlans.find(
-            (plan) => plan.clientId === input.clientId && plan.status === "active",
-          )?.id ?? undefined;
-        const plannedWorkout = {
-          id: plannedWorkoutId,
-          clientId: input.clientId,
-          sessionId,
-          sourcePlanId,
-          title: input.title.trim(),
-          objective: input.objective.trim(),
-          createdAt: now,
-          exercises: exercises.map((exercise) => ({
-            id: `pex-${crypto.randomUUID()}`,
-            name: exercise.name,
-            focus: exercise.focus,
-            note: exercise.note,
-            sets: exercise.sets.map((set) => ({
-              id: `ps-${crypto.randomUUID()}`,
-              label: set.label,
-              reps: set.reps,
-              weightKg: set.weightKg,
-              tempo: set.tempo,
-              rpe: set.rpe,
-              note: set.note,
-            })),
-          })),
-        };
-        const sessionWorkout: SessionWorkout = {
-          id: sessionWorkoutId,
-          sessionId,
-          title: input.title.trim(),
-          status: input.status === "completed" ? "completed" : "draft",
-          exercises: plannedWorkout.exercises.map((exercise) => ({
-            id: `sex-${crypto.randomUUID()}`,
-            plannedExerciseId: exercise.id,
-            name: exercise.name,
-            status: input.status === "completed" ? "completed" : "planned",
-            note: exercise.note,
-            sets: exercise.sets.map((set) => ({
-              id: `set-${crypto.randomUUID()}`,
-              label: set.label,
-              targetReps: set.reps,
-              actualReps: set.reps,
-              targetWeightKg: set.weightKg,
-              actualWeightKg: set.weightKg,
-              tempo: set.tempo,
-              rpe: set.rpe,
-              completed: input.status === "completed",
-              note: set.note,
-            })),
-          })),
-          coachNote: input.coachNote?.trim() ?? "",
-          athleteFacingNote: "",
-          updatedAt: now,
-        };
-        const reminderAt =
-          input.status === "planned" ? subtractHours(input.startAt, 24) : undefined;
-        const hasLocation = previous.trainingLocations.some(
-          (location) => location.name.toLowerCase() === normalizedLocation.toLowerCase(),
-        );
-        const trainingLocations = hasLocation
-          ? previous.trainingLocations
-          : sortTrainingLocations([
-              ...previous.trainingLocations,
-              {
-                id: `location-${crypto.randomUUID()}`,
-                name: normalizedLocation,
-              },
-            ]);
-
-        return {
-          ...previous,
-          trainingLocations,
-          sessions: [
-            {
-              id: sessionId,
-              title: input.title.trim(),
-              coachId: previous.users[0]?.id ?? "user-maria",
-              primaryClientId: input.clientId,
-              clientIds: [input.clientId],
-              kind: input.kind,
-              startAt: input.startAt,
-              endAt: input.endAt,
-              location: normalizedLocation,
-              status: input.status,
-              packagePurchaseId: input.packagePurchaseId,
-              plannedWorkoutId,
-              sessionWorkoutId,
-              reminderAt,
-              calendarSync: "manual",
-              note: input.sessionNote?.trim() || input.objective.trim() || undefined,
-            },
-            ...previous.sessions,
-          ],
-          plannedWorkouts: [plannedWorkout, ...previous.plannedWorkouts],
-          sessionWorkouts: [sessionWorkout, ...previous.sessionWorkouts],
-          reminders:
-            input.status === "planned" && reminderAt
-              ? [
-                  {
-                    id: `rem-${crypto.randomUUID()}`,
-                    clientId: input.clientId,
-                    sessionId,
-                    title: "24h reminder",
-                    dueAt: reminderAt,
-                    channel: "calendar",
-                    status: "scheduled",
-                  },
-                  ...previous.reminders,
-                ]
-              : previous.reminders,
-          packagePurchases: previous.packagePurchases.map((purchase) =>
-            purchase.id === input.packagePurchaseId && input.status === "completed"
-              ? {
-                  ...purchase,
-                  usedUnits: Math.min(purchase.totalUnits, purchase.usedUnits + 1),
-                }
-              : purchase,
-          ),
-          activityEvents: [
-            {
-              id: `act-${crypto.randomUUID()}`,
-              actor: previous.users[0]?.name ?? authUser?.email ?? "Coach",
-              clientId: input.clientId,
-              type:
-                input.status === "completed"
-                  ? "session.logged"
-                  : "session.planned",
-              detail:
-                input.status === "completed"
-                  ? `Logged historical workout ${input.title.trim()}.`
-                  : `Planned workout ${input.title.trim()} from the client profile.`,
-              createdAt: now,
-            },
-            ...previous.activityEvents,
-          ],
-        };
-      }),
+      applyCRMUpdate((previous) =>
+        createWorkoutSessionState(
+          previous,
+          input,
+          previous.users[0]?.name ?? authUser?.email ?? "Coach",
+        ),
+      ),
     convertLeadToClient: (leadId) => {
       let createdClient: ClientProfile | null = null;
 
@@ -2000,6 +2198,10 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           clientId: createdClientSnapshot.id,
           clientOverride: createdClientSnapshot,
           trigger: "client-create",
+        }).catch(() => undefined);
+        void generateInitialWorkout({
+          clientId: createdClientSnapshot.id,
+          clientOverride: createdClientSnapshot,
         });
       }
     },
