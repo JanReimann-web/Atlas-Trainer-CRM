@@ -30,6 +30,7 @@ export function LeadsScreen() {
   const { t, formatDate, locale } = useLocaleContext();
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
   const [form, setForm] = useState<CreateLeadInput>(defaultLeadForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [leadActionError, setLeadActionError] = useState<string | null>(null);
@@ -90,6 +91,7 @@ export function LeadsScreen() {
     });
 
     setForm(defaultLeadForm);
+    setIsLeadFormOpen(false);
   }
 
   async function handleLeadDelete(leadId: string, leadName: string) {
@@ -127,7 +129,18 @@ export function LeadsScreen() {
 
       <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
         <SectionCard title={t("forms.leadTitle")}>
-          <form className="space-y-4" onSubmit={handleSubmit}>
+          <button
+            type="button"
+            onClick={() => setIsLeadFormOpen((current) => !current)}
+            className="w-full rounded-full border border-[color:var(--line-soft)] bg-white/75 px-4 py-3 text-sm font-semibold text-[color:var(--ink)] md:hidden"
+          >
+            {isLeadFormOpen ? t("forms.leadFormClose") : t("forms.leadFormOpen")}
+          </button>
+
+          <form
+            className={`${isLeadFormOpen ? "mt-4 block" : "mt-4 hidden"} space-y-4 md:mt-0 md:block`}
+            onSubmit={handleSubmit}
+          >
             <div className="grid gap-4 md:grid-cols-2">
               <DataLabel label={t("fields.fullName")}>
                 <input
@@ -167,7 +180,9 @@ export function LeadsScreen() {
               <DataLabel label={t("fields.status")}>
                 <select
                   value={form.status}
-                  onChange={(event) => updateField("status", event.target.value as CreateLeadInput["status"])}
+                  onChange={(event) =>
+                    updateField("status", event.target.value as CreateLeadInput["status"])
+                  }
                   className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/85 px-4 py-3 text-sm outline-none"
                 >
                   {visibleLeadStatuses.map((status) => (
