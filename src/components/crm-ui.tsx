@@ -349,6 +349,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   }, [blockedPath, router]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [pathname]);
+
   if (blockedPath) {
     return null;
   }
@@ -441,7 +449,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </span>
               </Link>
             ) : null}
+          </div>
 
+          <main className="min-w-0">{children}</main>
+
+          <div className="lg:hidden">
             <div className="panel-surface rounded-[28px] p-4">
               <LanguageToggle showLabel />
               {user ? (
@@ -455,8 +467,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               ) : null}
             </div>
           </div>
-
-          <main className="min-w-0">{children}</main>
         </div>
       </div>
 
