@@ -251,6 +251,29 @@ export function SectionCard({
   );
 }
 
+export function MobileAccordionToggle({
+  isOpen,
+  onToggle,
+}: {
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useLocaleContext();
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="inline-flex w-full items-center justify-between rounded-full border border-[color:var(--line-soft)] bg-white/80 px-4 py-3 text-sm font-semibold text-[color:var(--ink)] md:hidden"
+    >
+      <span>{isOpen ? t("common.hideSection") : t("common.showSection")}</span>
+      <span aria-hidden="true" className="text-lg leading-none">
+        {isOpen ? "−" : "+"}
+      </span>
+    </button>
+  );
+}
+
 export function EmptyState({
   title,
   body,

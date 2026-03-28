@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useDeferredValue, useMemo, useState } from "react";
 import { useCRM, useLocaleContext } from "@/components/app-providers";
-import { DataLabel, EmptyState, SectionCard } from "@/components/crm-ui";
+import {
+  DataLabel,
+  EmptyState,
+  MobileAccordionToggle,
+  SectionCard,
+} from "@/components/crm-ui";
 import {
   getClientPurchases,
   getClientUpcomingSession,
@@ -62,6 +67,7 @@ export function ClientsScreen() {
     notes: searchParams.get("notes") ?? "",
   }));
   const [formError, setFormError] = useState<string | null>(null);
+  const [isClientFormOpen, setIsClientFormOpen] = useState(false);
   const deferredQuery = useDeferredValue(query);
 
   const filteredClients = useMemo(
@@ -128,6 +134,7 @@ export function ClientsScreen() {
       createClient(input);
     }
     setForm(defaultClientForm);
+    setIsClientFormOpen(false);
   }
 
   return (
@@ -136,6 +143,12 @@ export function ClientsScreen() {
 
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <SectionCard title={t("forms.clientTitle")}>
+          <MobileAccordionToggle
+            isOpen={isClientFormOpen}
+            onToggle={() => setIsClientFormOpen((current) => !current)}
+          />
+
+          <div className={`${isClientFormOpen ? "mt-4 block" : "hidden md:mt-4 md:block"}`}>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="grid gap-4 md:grid-cols-2">
               <DataLabel label={t("fields.fullName")}>
@@ -212,6 +225,7 @@ export function ClientsScreen() {
               {t("forms.clientSubmit")}
             </button>
           </form>
+          </div>
         </SectionCard>
 
         <SectionCard

@@ -6,6 +6,7 @@ import { useCRM, useLocaleContext } from "@/components/app-providers";
 import {
   DataLabel,
   EmptyState,
+  MobileAccordionToggle,
   SectionCard,
   StatCard,
   StatusBadge,
@@ -104,6 +105,8 @@ function SessionScheduleCard({
   session,
   trainingLocations,
   onSave,
+  isOpen,
+  onToggle,
 }: {
   session: Session;
   trainingLocations: TrainingLocation[];
@@ -113,6 +116,8 @@ function SessionScheduleCard({
     durationMinutes: number;
     location: string;
   }) => void;
+  isOpen: boolean;
+  onToggle: () => void;
 }) {
   const { t, locale, formatDate } = useLocaleContext();
   const [sessionDate, setSessionDate] = useState(() =>
@@ -136,6 +141,9 @@ function SessionScheduleCard({
           : `${formatDate(session.startAt)} / ${session.location}`
       }
     >
+      <MobileAccordionToggle isOpen={isOpen} onToggle={onToggle} />
+
+      <div className={`${isOpen ? "mt-4 block" : "hidden md:mt-4 md:block"}`}>
       <div className="grid gap-4 md:grid-cols-2">
         <DataLabel label={t("fields.sessionDate")}>
           <input
@@ -205,6 +213,7 @@ function SessionScheduleCard({
       >
         {t("common.save")}
       </button>
+      </div>
     </SectionCard>
   );
 }
@@ -236,6 +245,9 @@ export function WorkoutSessionScreen({
   const [isReworking, setIsReworking] = useState(false);
   const [isCompletingSession, setIsCompletingSession] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false);
+  const [isWorkoutExecutionOpen, setIsWorkoutExecutionOpen] = useState(false);
+  const [isCoachNotesOpen, setIsCoachNotesOpen] = useState(false);
 
   const bundle = getSessionBundle(state, sessionId);
   if (!bundle || !bundle.client || bundle.client.id !== clientId) {
@@ -392,6 +404,16 @@ export function WorkoutSessionScreen({
               </div>
             }
           >
+            <MobileAccordionToggle
+              isOpen={isWorkoutExecutionOpen}
+              onToggle={() => setIsWorkoutExecutionOpen((current) => !current)}
+            />
+
+            <div
+              className={`${
+                isWorkoutExecutionOpen ? "mt-4 block" : "hidden md:mt-4 md:block"
+              }`}
+            >
             {showReworkPanel ? (
               <div className="mb-5 rounded-[26px] border border-[color:var(--line-soft)] bg-white/65 p-5">
                 <div className="space-y-1">
@@ -575,9 +597,16 @@ export function WorkoutSessionScreen({
                 {t("workout.addExercise")}
               </button>
             </div>
+            </div>
           </SectionCard>
 
           <SectionCard title={t("workout.coachNotes")}>
+            <MobileAccordionToggle
+              isOpen={isCoachNotesOpen}
+              onToggle={() => setIsCoachNotesOpen((current) => !current)}
+            />
+
+            <div className={`${isCoachNotesOpen ? "mt-4 block" : "hidden md:mt-4 md:block"}`}>
             <div className="grid gap-4 md:grid-cols-2">
               <DataLabel label={t("workout.coachNotes")}>
                 <textarea
@@ -600,6 +629,7 @@ export function WorkoutSessionScreen({
                 />
               </DataLabel>
             </div>
+            </div>
           </SectionCard>
         </div>
 
@@ -608,6 +638,8 @@ export function WorkoutSessionScreen({
             key={`${session.id}-${session.startAt}-${session.endAt}-${session.location}`}
             session={session}
             trainingLocations={state.trainingLocations}
+            isOpen={isScheduleOpen}
+            onToggle={() => setIsScheduleOpen((current) => !current)}
             onSave={(schedule) =>
               updateSessionSchedule({
                 sessionId: session.id,

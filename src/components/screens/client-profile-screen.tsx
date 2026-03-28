@@ -6,6 +6,7 @@ import { useCRM, useLocaleContext } from "@/components/app-providers";
 import {
   DataLabel,
   EmptyState,
+  MobileAccordionToggle,
   SectionCard,
   StatCard,
   StatusBadge,
@@ -289,6 +290,13 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
   const [workoutEntryError, setWorkoutEntryError] = useState<string | null>(null);
   const [isWorkoutExerciseEditorOpen, setIsWorkoutExerciseEditorOpen] = useState(false);
   const [openWorkoutRecapId, setOpenWorkoutRecapId] = useState<string | null>(null);
+  const [isOverviewOpen, setIsOverviewOpen] = useState(false);
+  const [isPackagesOpen, setIsPackagesOpen] = useState(false);
+  const [isWorkoutsOpen, setIsWorkoutsOpen] = useState(false);
+  const [isWorkoutEntryOpen, setIsWorkoutEntryOpen] = useState(false);
+  const [isAssessmentsOpen, setIsAssessmentsOpen] = useState(false);
+  const [isNutritionOpen, setIsNutritionOpen] = useState(false);
+  const [isWorkoutRecapsOpen, setIsWorkoutRecapsOpen] = useState(false);
 
   useEffect(() => {
     refreshNutritionPlanRef.current = refreshNutritionPlan;
@@ -795,6 +803,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     addWorkoutSession(input);
     setWorkoutEntryForm(createWorkoutEntryForm(state.trainingLocations[0]?.name ?? ""));
     setIsWorkoutExerciseEditorOpen(false);
+    setIsWorkoutEntryOpen(false);
   }
 
   function updateWorkoutExercise(
@@ -969,6 +978,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                     setEditingProfile(false);
                     return;
                   }
+                  setIsOverviewOpen(true);
                   setProfileForm(buildClientProfileForm(client));
                   setProfileError(null);
                   setEditingProfile(true);
@@ -984,6 +994,12 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
             </div>
           }
         >
+          <MobileAccordionToggle
+            isOpen={isOverviewOpen}
+            onToggle={() => setIsOverviewOpen((current) => !current)}
+          />
+
+          <div className={`${isOverviewOpen ? "mt-4 block" : "hidden md:mt-4 md:block"}`}>
             <div className="rounded-[24px] border border-[color:var(--line-soft)] bg-white/60 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -1191,9 +1207,16 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
               </div>
             </form>
           ) : null}
+          </div>
         </SectionCard>
 
         <SectionCard title={t("clientProfile.packages")} help={t("help.packageBalance")}>
+          <MobileAccordionToggle
+            isOpen={isPackagesOpen}
+            onToggle={() => setIsPackagesOpen((current) => !current)}
+          />
+
+          <div className={`${isPackagesOpen ? "mt-4 block" : "hidden md:mt-4 md:block"}`}>
           <div className="space-y-4">
             {clientOutstanding > 0 ? (
               <div className="rounded-[24px] border border-rose-200 bg-rose-50 p-4">
@@ -1458,6 +1481,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
               </button>
             </form>
           </div>
+          </div>
         </SectionCard>
       </div>
 
@@ -1465,6 +1489,12 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
         title={t("clientProfile.workouts")}
         help={t("help.workoutPlan")}
       >
+        <MobileAccordionToggle
+          isOpen={isWorkoutsOpen}
+          onToggle={() => setIsWorkoutsOpen((current) => !current)}
+        />
+
+        <div className={`${isWorkoutsOpen ? "mt-4 block" : "hidden md:mt-4 md:block"}`}>
         <datalist id={`exercise-library-${clientId}`}>
           {state.exerciseLibrary.map((exercise) => (
             <option key={exercise.id} value={exercise.name} />
@@ -1564,6 +1594,14 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
           </div>
 
           <div>
+            <div className="md:hidden">
+              <MobileAccordionToggle
+                isOpen={isWorkoutEntryOpen}
+                onToggle={() => setIsWorkoutEntryOpen((current) => !current)}
+              />
+            </div>
+
+            <div className={`${isWorkoutEntryOpen ? "mt-4 block" : "hidden md:mt-0 md:block"}`}>
             <form
               className="rounded-[24px] border border-[color:var(--line-soft)] bg-[color:var(--sand-2)]/55 p-4"
               onSubmit={submitWorkoutEntry}
@@ -1881,11 +1919,19 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                 </button>
               ) : null}
             </form>
+            </div>
           </div>
+        </div>
         </div>
       </SectionCard>
 
       <SectionCard title={t("clientProfile.assessments")} help={t("help.bodyAssessment")}>
+        <MobileAccordionToggle
+          isOpen={isAssessmentsOpen}
+          onToggle={() => setIsAssessmentsOpen((current) => !current)}
+        />
+
+        <div className={`${isAssessmentsOpen ? "mt-4 block" : "hidden md:mt-4 md:block"}`}>
         <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
           <div className="space-y-3">
             {assessments.length === 0 ? (
@@ -2015,6 +2061,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
             </button>
           </form>
         </div>
+        </div>
       </SectionCard>
 
       <SectionCard
@@ -2027,6 +2074,12 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
           ) : null
         }
       >
+        <MobileAccordionToggle
+          isOpen={isNutritionOpen}
+          onToggle={() => setIsNutritionOpen((current) => !current)}
+        />
+
+        <div className={`${isNutritionOpen ? "mt-4 block" : "hidden md:mt-4 md:block"}`}>
         {nutritionError ? (
           <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
             {nutritionError}
@@ -2085,11 +2138,18 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
             }
           />
         )}
+        </div>
       </SectionCard>
 
       <SectionCard
         title={t("clientProfile.workoutRecaps")}
       >
+        <MobileAccordionToggle
+          isOpen={isWorkoutRecapsOpen}
+          onToggle={() => setIsWorkoutRecapsOpen((current) => !current)}
+        />
+
+        <div className={`${isWorkoutRecapsOpen ? "mt-4 block" : "hidden md:mt-4 md:block"}`}>
         <div className="space-y-3">
           {workoutRecaps.length === 0 ? (
             <EmptyState title={t("common.none")} body={t("clientProfile.noWorkoutRecaps")} />
@@ -2142,6 +2202,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
               );
             })
           )}
+        </div>
         </div>
       </SectionCard>
     </div>
