@@ -25,6 +25,13 @@ export const metadata: Metadata = {
   title: "Atlas Trainer CRM",
   description:
     "AI-assisted CRM for personal training, group coaching, packages, workout execution, and client follow-up.",
+  applicationName: "Atlas Trainer CRM",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Atlas Trainer CRM",
+  },
 };
 
 export default function RootLayout({
