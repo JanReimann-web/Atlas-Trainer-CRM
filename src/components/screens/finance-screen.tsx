@@ -1,8 +1,9 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useCRM, useLocaleContext } from "@/components/app-providers";
-import { SectionCard, StatCard } from "@/components/crm-ui";
-import { getNextMonthKey, getLocalMonthKey } from "@/lib/date";
+import { EmptyState, SectionCard, StatCard } from "@/components/crm-ui";
+import { getCurrentMonthKey, getNextMonthKey, getLocalMonthKey } from "@/lib/date";
 import {
   getClient,
   getInvoiceOutstandingAmount,
@@ -15,25 +16,109 @@ import {
 } from "@/lib/selectors";
 import { PageLead, TimelineItem } from "@/components/screens/shared";
 
+function getMonthDate(monthKey: string) {
+  const [year, month] = monthKey.split("-").map(Number);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) {
+    return new Date();
+  }
+
+  return new Date(year, month - 1, 1);
+}
+
+function buildMonthOptions(monthKeys: string[], currentMonthKey: string) {
+  const uniqueMonthKeys = [...new Set([...monthKeys.filter(Boolean), currentMonthKey])];
+  const oldestMonthKey = [...uniqueMonthKeys].sort()[0] ?? currentMonthKey;
+  const oldestMonthDate = getMonthDate(oldestMonthKey);
+  const currentMonthDate = getMonthDate(currentMonthKey);
+  const options: string[] = [];
+
+  for (
+    let cursor = currentMonthDate;
+    cursor >= oldestMonthDate;
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1)
+  ) {
+    options.push(getLocalMonthKey(cursor));
+  }
+
+  return options;
+}
+
 export function FinanceScreen() {
   const { state } = useCRM();
-  const { t, formatCurrency, formatDate } = useLocaleContext();
+  const { t, formatCurrency, formatDate, locale } = useLocaleContext();
+  const currentMonthKey = getCurrentMonthKey();
+  const [selectedMonthKey, setSelectedMonthKey] = useState(currentMonthKey);
+  const localeTag = locale === "et" ? "et-EE" : "en-GB";
   const nextMonthKey = getNextMonthKey();
   const expiring = state.packagePurchases.filter(
     (purchase) => getLocalMonthKey(purchase.expiresAt) === nextMonthKey,
   );
-  const cardRevenue = getMonthlyRevenueByMethod(state, "card");
-  const cashRevenue = getMonthlyRevenueByMethod(state, "cash");
+  const monthOptions = useMemo(
+    () =>
+      buildMonthOptions(
+        [
+          ...state.invoiceRecords.map((invoice) => getLocalMonthKey(invoice.dueAt)),
+          ...state.paymentRecords.map((payment) => getLocalMonthKey(payment.paidAt)),
+        ],
+        currentMonthKey,
+      ),
+    [currentMonthKey, state.invoiceRecords, state.paymentRecords],
+  );
+  const activeMonthKey = monthOptions.includes(selectedMonthKey)
+    ? selectedMonthKey
+    : currentMonthKey;
+
+  const selectedMonthLabel = useMemo(
+    () =>
+      new Intl.DateTimeFormat(localeTag, {
+        month: "long",
+        year: "numeric",
+      }).format(getMonthDate(activeMonthKey)),
+    [activeMonthKey, localeTag],
+  );
+  const monthlyRevenue = getMonthlyRevenue(state, activeMonthKey);
+  const cardRevenue = getMonthlyRevenueByMethod(state, "card", activeMonthKey);
+  const cashRevenue = getMonthlyRevenueByMethod(state, "cash", activeMonthKey);
+  const filteredInvoices = useMemo(
+    () =>
+      [...state.invoiceRecords]
+        .filter((invoice) => getLocalMonthKey(invoice.dueAt) === activeMonthKey)
+        .sort((left, right) => {
+          const leftKey = left.issuedAt || left.dueAt;
+          const rightKey = right.issuedAt || right.dueAt;
+          return rightKey.localeCompare(leftKey);
+        }),
+    [activeMonthKey, state.invoiceRecords],
+  );
 
   return (
     <div className="space-y-6">
-      <PageLead eyebrow={t("nav.finance")} title={t("finance.title")} />
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <PageLead eyebrow={t("nav.finance")} title={t("finance.title")} />
+        <label className="min-w-[220px] space-y-2 text-sm">
+          <span className="font-medium text-[color:var(--ink)]">{t("finance.monthFilter")}</span>
+          <select
+            value={activeMonthKey}
+            onChange={(event) => setSelectedMonthKey(event.target.value)}
+            className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white/80 px-4 py-3 text-sm outline-none"
+          >
+            {monthOptions.map((monthKey) => (
+              <option key={monthKey} value={monthKey}>
+                {new Intl.DateTimeFormat(localeTag, {
+                  month: "long",
+                  year: "numeric",
+                }).format(getMonthDate(monthKey))}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard
-          label={t("dashboard.receivedThisMonth")}
-          value={formatCurrency(getMonthlyRevenue(state))}
-          detail={t("finance.receivedDetail")}
+          label={t("finance.received")}
+          value={formatCurrency(monthlyRevenue)}
+          detail={`${t("finance.receivedDetail")} / ${selectedMonthLabel}`}
         />
         <StatCard
           label={t("dashboard.outstanding")}
@@ -49,14 +134,14 @@ export function FinanceScreen() {
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <SectionCard title={t("finance.invoices")} help={t("help.finance")}>
-          <div className="space-y-3">
-            {[...state.invoiceRecords]
-              .sort((left, right) => {
-                const leftKey = left.issuedAt || left.dueAt;
-                const rightKey = right.issuedAt || right.dueAt;
-                return rightKey.localeCompare(leftKey);
-              })
-              .map((invoice) => {
+          {filteredInvoices.length === 0 ? (
+            <EmptyState
+              title={t("common.none")}
+              body={`${t("finance.noInvoicesForMonth")} ${selectedMonthLabel}.`}
+            />
+          ) : (
+            <div className="space-y-3">
+              {filteredInvoices.map((invoice) => {
               const client = getClient(state, invoice.clientId);
               const purchase = invoice.packagePurchaseId
                 ? state.packagePurchases.find((item) => item.id === invoice.packagePurchaseId)
@@ -91,8 +176,9 @@ export function FinanceScreen() {
                   </div>
                 </div>
               );
-            })}
-          </div>
+              })}
+            </div>
+          )}
         </SectionCard>
 
         <div className="grid gap-6">
@@ -100,12 +186,12 @@ export function FinanceScreen() {
             <div className="grid gap-3">
               <TimelineItem
                 title={t("finance.cardPayments")}
-                detail={t("finance.cardPaymentsDetail")}
+                detail={`${t("finance.cardPaymentsDetail")} / ${selectedMonthLabel}`}
                 meta={formatCurrency(cardRevenue)}
               />
               <TimelineItem
                 title={t("finance.cashPayments")}
-                detail={t("finance.cashPaymentsDetail")}
+                detail={`${t("finance.cashPaymentsDetail")} / ${selectedMonthLabel}`}
                 meta={formatCurrency(cashRevenue)}
               />
             </div>
