@@ -35,6 +35,7 @@ import {
   buildPackageAllocation,
   getClientAssessments,
   getClientNutritionPlans,
+  getInvoiceOutstandingAmount,
   getClientSessions,
   getInvoicePaidAmount,
   getSessionUnitPrice,
