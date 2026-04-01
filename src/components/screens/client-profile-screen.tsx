@@ -258,6 +258,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     state,
     addPackagePurchase,
     deletePackagePurchase,
+    markInvoicePaid,
     addBodyAssessment,
     addWorkoutSession,
     updateClient,
@@ -286,6 +287,11 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
   const [packageError, setPackageError] = useState<string | null>(null);
   const [packageActionError, setPackageActionError] = useState<string | null>(null);
   const [deletingPurchaseId, setDeletingPurchaseId] = useState<string | null>(null);
+  const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
+  const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null);
+  const [invoicePaymentMethods, setInvoicePaymentMethods] = useState<
+    Record<string, PaymentMethod>
+  >({});
   const [assessmentError, setAssessmentError] = useState<string | null>(null);
   const [workoutEntryForm, setWorkoutEntryForm] = useState(() =>
     createWorkoutEntryForm(state.trainingLocations[0]?.name ?? ""),
@@ -703,6 +709,32 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
       );
     } finally {
       setDeletingPurchaseId(null);
+    }
+  }
+
+  function setInvoicePaymentMethod(invoiceId: string, method: PaymentMethod) {
+    setInvoicePaymentMethods((current) => ({
+      ...current,
+      [invoiceId]: method,
+    }));
+  }
+
+  async function handleInvoicePayment(invoiceId: string) {
+    setPackageActionError(null);
+    setPayingInvoiceId(invoiceId);
+
+    try {
+      await markInvoicePaid({
+        invoiceId,
+        method: invoicePaymentMethods[invoiceId] ?? "card",
+      });
+      setOpenInvoiceId((current) => (current === invoiceId ? null : current));
+    } catch (error) {
+      setPackageActionError(
+        error instanceof Error ? error.message : t("clientProfile.invoicePaymentFailed"),
+      );
+    } finally {
+      setPayingInvoiceId(null);
     }
   }
 
@@ -1278,6 +1310,9 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                     const linkedSession = invoice.sessionId
                       ? sessions.find((session) => session.id === invoice.sessionId)
                       : null;
+                    const amountDue = getInvoiceOutstandingAmount(state, invoice);
+                    const isInvoiceOpen = openInvoiceId === invoice.id;
+                    const paymentMethod = invoicePaymentMethods[invoice.id] ?? "card";
 
                     return (
                       <div
@@ -1299,13 +1334,68 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                                 : `${formatDate(invoice.issuedAt)} / ${formatDate(invoice.dueAt)}`}
                             </p>
                           </div>
-                          <div className="flex items-center gap-3">
+                          <div className="flex flex-wrap items-center justify-end gap-3">
                             <StatusBadge status={invoice.paymentStatus} />
                             <span className="text-sm font-semibold text-rose-900">
-                              {formatCurrency(getInvoiceOutstandingAmount(state, invoice))}
+                              {formatCurrency(amountDue)}
                             </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setOpenInvoiceId((current) =>
+                                  current === invoice.id ? null : invoice.id,
+                                )
+                              }
+                              className="rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-900 transition hover:bg-rose-100"
+                            >
+                              {isInvoiceOpen
+                                ? t("clientProfile.hideInvoice")
+                                : t("clientProfile.openInvoice")}
+                            </button>
                           </div>
                         </div>
+
+                        {isInvoiceOpen ? (
+                          <div className="mt-4 rounded-[18px] border border-rose-200 bg-rose-50/70 p-3">
+                            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-[color:var(--ink)]">
+                                  {t("fields.paymentMethod")}
+                                </p>
+                                <p className="mt-1 text-sm leading-6 text-[color:var(--muted-ink)]">
+                                  {t("clientProfile.invoicePaymentHelp")}
+                                </p>
+                                <div className="mt-3 grid grid-cols-2 gap-2 rounded-full bg-white p-1">
+                                  {(["card", "cash"] as const).map((method) => (
+                                    <button
+                                      key={method}
+                                      type="button"
+                                      onClick={() => setInvoicePaymentMethod(invoice.id, method)}
+                                      className={`rounded-full px-3 py-2 text-sm font-semibold transition ${
+                                        paymentMethod === method
+                                          ? "bg-[color:var(--ink)] text-white"
+                                          : "text-[color:var(--ink)]"
+                                      }`}
+                                    >
+                                      {t(`paymentMethod.${method}`)}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => void handleInvoicePayment(invoice.id)}
+                                disabled={payingInvoiceId === invoice.id}
+                                className="rounded-full bg-[color:var(--ink)] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-300"
+                              >
+                                {payingInvoiceId === invoice.id
+                                  ? t("clientProfile.markingInvoicePaid")
+                                  : `${t("clientProfile.markInvoicePaid")} ${formatCurrency(amountDue)}`}
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}

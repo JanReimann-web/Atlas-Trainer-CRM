@@ -54,6 +54,7 @@ import {
   CreateWorkoutSessionInput,
   Locale,
   NutritionPlan,
+  PaymentMethod,
   PackageTemplateInput,
   PlannedWorkout,
   SessionExercise,
@@ -113,6 +114,7 @@ type CRMContextValue = {
   deleteTrainingLocation: (locationId: string) => CatalogMutationResult;
   addPackagePurchase: (input: CreatePackagePurchaseInput) => void;
   deletePackagePurchase: (purchaseId: string) => Promise<void>;
+  markInvoicePaid: (args: { invoiceId: string; method: PaymentMethod }) => Promise<void>;
   addBodyAssessment: (input: CreateBodyAssessmentInput) => BodyAssessment | null;
   addWorkoutPlan: (input: CreateWorkoutPlanInput) => void;
   addWorkoutSession: (input: CreateWorkoutSessionInput) => void;
@@ -1643,6 +1645,63 @@ function removePackagePurchaseFromState(
   });
 }
 
+function markInvoicePaidInState(
+  previous: CRMState,
+  args: { invoiceId: string; method: PaymentMethod },
+  actor: string,
+): CRMState {
+  const invoice = previous.invoiceRecords.find((item) => item.id === args.invoiceId);
+  if (!invoice) {
+    return previous;
+  }
+
+  const outstandingAmount = getInvoiceOutstandingAmount(previous, invoice);
+  if (outstandingAmount <= 0) {
+    return previous;
+  }
+
+  const purchase = invoice.packagePurchaseId
+    ? previous.packagePurchases.find((item) => item.id === invoice.packagePurchaseId)
+    : null;
+  const template = purchase
+    ? previous.packageTemplates.find((item) => item.id === purchase.templateId)
+    : null;
+  const session = invoice.sessionId
+    ? previous.sessions.find((item) => item.id === invoice.sessionId)
+    : null;
+  const now = timestamp();
+
+  return reconcileBillingState({
+    ...previous,
+    paymentRecords: [
+      {
+        id: `pay-${crypto.randomUUID()}`,
+        clientId: invoice.clientId,
+        invoiceId: invoice.id,
+        paidAt: now,
+        amount: outstandingAmount,
+        currency: invoice.currency,
+        method: args.method,
+      },
+      ...previous.paymentRecords,
+    ],
+    activityEvents: [
+      {
+        id: `act-${crypto.randomUUID()}`,
+        actor,
+        clientId: invoice.clientId,
+        type: "invoice.paid",
+        detail:
+          invoice.source === "session-debt"
+            ? `Recorded payment for uncovered session ${session?.title ?? invoice.id}.`
+            : `Recorded payment for ${template?.name ?? "package invoice"}.`,
+        createdAt: now,
+      },
+      ...previous.activityEvents,
+    ],
+  });
+}
+
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const firebaseConfigured = isFirebaseConfigured();
   const [locale, setLocaleState] = useState<Locale>("en");
@@ -3061,6 +3120,53 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
               error instanceof Error
                 ? error.message
                 : "Package purchase deletion failed.";
+            setCrmError(message);
+            throw error;
+          }
+        }
+      }
+    },
+    markInvoicePaid: async ({ invoiceId, method }) => {
+      const previous = stateRef.current;
+      if (!previous.invoiceRecords.some((item) => item.id === invoiceId)) {
+        return;
+      }
+
+      const next = markInvoicePaidInState(
+        previous,
+        { invoiceId, method },
+        previous.users[0]?.name ?? authUser?.email ?? "Coach",
+      );
+      if (next === previous) {
+        return;
+      }
+
+      setCrmError(null);
+      stateRef.current = next;
+      setState(next);
+
+      if (firebaseConfigured && authUser) {
+        const services = getFirebaseServices();
+        if (services) {
+          try {
+            const persistPromise = saveQueueRef.current.then(() =>
+              saveCRMState(services.db, next, previous),
+            );
+            saveQueueRef.current = persistPromise.catch((error) => {
+              setCrmError(
+                error instanceof Error
+                  ? error.message
+                  : "Could not sync CRM state to Firebase.",
+              );
+            });
+            await persistPromise;
+          } catch (error) {
+            stateRef.current = previous;
+            setState(previous);
+            const message =
+              error instanceof Error
+                ? error.message
+                : "Invoice payment update failed.";
             setCrmError(message);
             throw error;
           }
