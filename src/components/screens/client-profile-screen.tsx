@@ -257,6 +257,7 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
   const {
     state,
     addPackagePurchase,
+    deletePackagePurchase,
     addBodyAssessment,
     addWorkoutSession,
     updateClient,
@@ -283,6 +284,8 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
     metrics: [createAssessmentMetricForm()],
   });
   const [packageError, setPackageError] = useState<string | null>(null);
+  const [packageActionError, setPackageActionError] = useState<string | null>(null);
+  const [deletingPurchaseId, setDeletingPurchaseId] = useState<string | null>(null);
   const [assessmentError, setAssessmentError] = useState<string | null>(null);
   const [workoutEntryForm, setWorkoutEntryForm] = useState(() =>
     createWorkoutEntryForm(state.trainingLocations[0]?.name ?? ""),
@@ -679,6 +682,28 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
 
     addPackagePurchase(input);
     setPackageForm(createPackageForm(state.packageTemplates[0]?.id ?? "", state.packageTemplates[0]?.price ?? 0));
+  }
+
+  async function handlePackageDelete(purchaseId: string, purchaseName: string) {
+    const confirmed = window.confirm(
+      `${t("clientProfile.deletePurchaseConfirm")} ${purchaseName}? ${t("clientProfile.deletePurchaseConfirmDetail")}`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setPackageActionError(null);
+    setDeletingPurchaseId(purchaseId);
+
+    try {
+      await deletePackagePurchase(purchaseId);
+    } catch (error) {
+      setPackageActionError(
+        error instanceof Error ? error.message : t("clientProfile.deletePurchaseFailed"),
+      );
+    } finally {
+      setDeletingPurchaseId(null);
+    }
   }
 
   async function submitAssessment(event: FormEvent<HTMLFormElement>) {
@@ -1218,6 +1243,12 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
 
           <div className={`${isPackagesOpen ? "mt-4 block" : "hidden md:mt-4 md:block"}`}>
           <div className="space-y-4">
+            {packageActionError ? (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                {packageActionError}
+              </div>
+            ) : null}
+
             {clientOutstanding > 0 ? (
               <div className="rounded-[24px] border border-rose-200 bg-rose-50 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1317,6 +1348,40 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                         <span className="text-sm font-semibold text-[color:var(--ink)]">
                           {remainingUnits}/{purchase.totalUnits} {t("common.remaining")}
                         </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void handlePackageDelete(
+                              purchase.id,
+                              template?.name ?? t("forms.purchaseTitle"),
+                            )
+                          }
+                          disabled={deletingPurchaseId === purchase.id}
+                          aria-label={t("common.delete")}
+                          title={
+                            deletingPurchaseId === purchase.id
+                              ? t("clientProfile.deletingPurchase")
+                              : t("common.delete")
+                          }
+                          className="flex h-10 w-10 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-900 transition disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="h-4 w-4"
+                          >
+                            <path d="M3 6h18" />
+                            <path d="M8 6V4.75A1.75 1.75 0 0 1 9.75 3h4.5A1.75 1.75 0 0 1 16 4.75V6" />
+                            <path d="M6.75 6l.9 12.18A2 2 0 0 0 9.64 20h4.72a2 2 0 0 0 1.99-1.82L17.25 6" />
+                            <path d="M10 10.25v5.5" />
+                            <path d="M14 10.25v5.5" />
+                          </svg>
+                        </button>
                       </div>
                     </div>
                   </div>

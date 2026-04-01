@@ -112,6 +112,7 @@ type CRMContextValue = {
   ) => CatalogMutationResult;
   deleteTrainingLocation: (locationId: string) => CatalogMutationResult;
   addPackagePurchase: (input: CreatePackagePurchaseInput) => void;
+  deletePackagePurchase: (purchaseId: string) => Promise<void>;
   addBodyAssessment: (input: CreateBodyAssessmentInput) => BodyAssessment | null;
   addWorkoutPlan: (input: CreateWorkoutPlanInput) => void;
   addWorkoutSession: (input: CreateWorkoutSessionInput) => void;
@@ -1588,6 +1589,60 @@ function removeLeadFromState(previous: CRMState, leadId: string): CRMState {
   };
 }
 
+function removePackagePurchaseFromState(
+  previous: CRMState,
+  purchaseId: string,
+  actor: string,
+): CRMState {
+  const purchase = previous.packagePurchases.find((item) => item.id === purchaseId);
+  if (!purchase) {
+    return previous;
+  }
+
+  const deletedInvoiceIds = new Set(
+    previous.invoiceRecords
+      .filter(
+        (invoice) =>
+          invoice.packagePurchaseId === purchaseId || invoice.id === purchase.invoiceId,
+      )
+      .map((invoice) => invoice.id),
+  );
+  const templateName =
+    previous.packageTemplates.find((template) => template.id === purchase.templateId)?.name ??
+    "package";
+  const now = timestamp();
+
+  return reconcileBillingState({
+    ...previous,
+    packagePurchases: previous.packagePurchases.filter((item) => item.id !== purchaseId),
+    sessions: previous.sessions.map((session) =>
+      session.packagePurchaseId === purchaseId
+        ? {
+            ...session,
+            packagePurchaseId: undefined,
+          }
+        : session,
+    ),
+    invoiceRecords: previous.invoiceRecords.filter(
+      (invoice) => !deletedInvoiceIds.has(invoice.id),
+    ),
+    paymentRecords: previous.paymentRecords.filter(
+      (payment) => !deletedInvoiceIds.has(payment.invoiceId),
+    ),
+    activityEvents: [
+      {
+        id: `act-${crypto.randomUUID()}`,
+        actor,
+        clientId: purchase.clientId,
+        type: "package.deleted",
+        detail: `Deleted ${templateName} package purchase.`,
+        createdAt: now,
+      },
+      ...previous.activityEvents,
+    ],
+  });
+}
+
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const firebaseConfigured = isFirebaseConfigured();
   const [locale, setLocaleState] = useState<Locale>("en");
@@ -2965,6 +3020,53 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           ],
         });
       }),
+    deletePackagePurchase: async (purchaseId) => {
+      const previous = stateRef.current;
+      if (!previous.packagePurchases.some((item) => item.id === purchaseId)) {
+        return;
+      }
+
+      const next = removePackagePurchaseFromState(
+        previous,
+        purchaseId,
+        previous.users[0]?.name ?? authUser?.email ?? "Coach",
+      );
+      if (next === previous) {
+        return;
+      }
+
+      setCrmError(null);
+      stateRef.current = next;
+      setState(next);
+
+      if (firebaseConfigured && authUser) {
+        const services = getFirebaseServices();
+        if (services) {
+          try {
+            const persistPromise = saveQueueRef.current.then(() =>
+              saveCRMState(services.db, next, previous),
+            );
+            saveQueueRef.current = persistPromise.catch((error) => {
+              setCrmError(
+                error instanceof Error
+                  ? error.message
+                  : "Could not sync CRM state to Firebase.",
+              );
+            });
+            await persistPromise;
+          } catch (error) {
+            stateRef.current = previous;
+            setState(previous);
+            const message =
+              error instanceof Error
+                ? error.message
+                : "Package purchase deletion failed.";
+            setCrmError(message);
+            throw error;
+          }
+        }
+      }
+    },
     addBodyAssessment: (input) => {
       const snapshot = stateRef.current;
       const metrics = input.metrics
