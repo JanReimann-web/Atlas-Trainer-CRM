@@ -291,6 +291,11 @@ const messages: Record<Locale, DictionaryTree> = {
       sharedPurchasePaidBy: "Paid by",
       noActivePackage: "No active package",
       noPurchaseHistory: "No package purchases have been recorded yet.",
+      deletingPurchase: "Deleting purchase...",
+      deletePurchaseConfirm: "Delete this package purchase permanently:",
+      deletePurchaseConfirmDetail:
+        "Completed sessions linked to it will be reassigned to another valid package or marked unpaid.",
+      deletePurchaseFailed: "Package purchase deletion failed. Please try again.",
       openBalance: "Open balance",
       openBalancePackageOnly: "There is an unpaid package balance linked to this client.",
       uncoveredSessionCount: "completed sessions are not covered by a package.",
@@ -823,6 +828,11 @@ const messages: Record<Locale, DictionaryTree> = {
       sharedPurchasePaidBy: "Tasub",
       noActivePackage: "Aktiivne pakett puudub",
       noPurchaseHistory: "Ühtegi paketiostu pole veel salvestatud.",
+      deletingPurchase: "Kustutan paketiostu...",
+      deletePurchaseConfirm: "Kas kustutan selle paketiostu jäädavalt:",
+      deletePurchaseConfirmDetail:
+        "Sellega seotud tehtud treeningud lähevad teise sobiva paketi alla või muutuvad maksmata treeninguteks.",
+      deletePurchaseFailed: "Paketiostu kustutamine ebaõnnestus. Proovi uuesti.",
       openBalance: "Võlgnevus",
       openBalancePackageOnly: "Selle kliendi paketiga on seotud tasumata summa.",
       uncoveredSessionCount: "tehtud treeningut ei ole paketiga kaetud.",
