@@ -25,6 +25,23 @@ export function getDateInputValue(offsetDays = 0) {
   return getDateInputValueFromDate(date);
 }
 
+export function addMonthsToDateInputValue(dateValue: string, months: number) {
+  const parsedDate = parseDateInput(dateValue);
+  if (!parsedDate || !Number.isFinite(months)) {
+    return "";
+  }
+
+  const targetMonthIndex = parsedDate.month - 1 + months;
+  const targetYear = parsedDate.year + Math.floor(targetMonthIndex / 12);
+  const normalizedMonthIndex = ((targetMonthIndex % 12) + 12) % 12;
+  const lastDayOfTargetMonth = new Date(targetYear, normalizedMonthIndex + 1, 0).getDate();
+  const targetDay = Math.min(parsedDate.day, lastDayOfTargetMonth);
+
+  return getDateInputValueFromDate(
+    new Date(targetYear, normalizedMonthIndex, targetDay),
+  );
+}
+
 export function getDateInputValueFromIso(value?: string) {
   if (!value) {
     return "";

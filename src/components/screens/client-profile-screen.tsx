@@ -40,6 +40,7 @@ import {
 } from "@/lib/types";
 import {
   addMinutesToIso,
+  addMonthsToDateInputValue,
   buildIsoFromDate,
   buildIsoFromDateTime,
   getDateInputValue,
@@ -208,12 +209,13 @@ function getSuggestedPaidAmount(
 }
 
 function createPackageForm(templateId = "", templatePrice = 0): PackageForm {
+  const startsDate = getDateInputValue();
   return {
     templateId,
     sharedClientId: "",
     purchasedDate: getDateInputValue(),
-    startsDate: getDateInputValue(),
-    expiresDate: getDateInputValue(60),
+    startsDate,
+    expiresDate: addMonthsToDateInputValue(startsDate, 3),
     paymentStatus: "paid",
     paymentMethod: "card",
     amountPaid: templatePrice > 0 ? String(templatePrice) : "",
@@ -1579,7 +1581,11 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                     lang={locale === "et" ? "et-EE" : "en-GB"}
                     value={packageForm.startsDate}
                     onChange={(event) =>
-                      setPackageForm((current) => ({ ...current, startsDate: event.target.value }))
+                      setPackageForm((current) => ({
+                        ...current,
+                        startsDate: event.target.value,
+                        expiresDate: addMonthsToDateInputValue(event.target.value, 3),
+                      }))
                     }
                     className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
                   />
@@ -1590,7 +1596,11 @@ export function ClientProfileScreen({ clientId }: { clientId: string }) {
                     lang={locale === "et" ? "et-EE" : "en-GB"}
                     value={packageForm.expiresDate}
                     onChange={(event) =>
-                      setPackageForm((current) => ({ ...current, expiresDate: event.target.value }))
+                      setPackageForm((current) => ({
+                        ...current,
+                        expiresDate:
+                          event.target.value || addMonthsToDateInputValue(current.startsDate, 3),
+                      }))
                     }
                     className="w-full rounded-2xl border border-[color:var(--line-soft)] bg-white px-4 py-3 text-sm outline-none"
                   />
